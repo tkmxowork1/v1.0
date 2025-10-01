@@ -161,7 +161,7 @@ async function isSubscribed(userId: string): Promise<boolean> {
       const data = await res.json();
       if (!data.ok) return false;
       const status = data.result.status;
-      if (!['creator', 'administrator', 'member'].includes(status)) return false;
+      if (!['creator', 'administrator', 'member', 'restricted'].includes(status)) return false;
     } catch (e) {
       console.error("isSubscribed error for " + ch, e);
       return false;
@@ -533,14 +533,11 @@ async function endTurnIdle(battle: any) {
 async function sendRoundStart(battle: any) {
   for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
     const header = headerForPlayer(battle, player);
-    const opponent = battle.players.find((p: string) => p !== player)!;
-    const yourWins = battle.roundWins[player];
-    const opponentWins = battle.roundWins[opponent];
     const yourTurn = battle.turn === player;
     const text =
       `${header}\n\n` +
       `*Tur ${battle.round}/${battle.rounds}*\n` +
-      `📊 Hesap: ${yourWins} - ${opponentWins}\n` +
+      `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n` +
       `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}\n` +
       boardToText(battle.board);
     const msgId = await sendMessage(player, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
@@ -832,13 +829,10 @@ async function handleCallback(cb: any) {
     for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
       const msgId = battle.messageIds[player];
       const header = headerForPlayer(battle, player);
-      const opponent = battle.players.find((p: string) => p !== player)!;
-      const yourWins = battle.roundWins[player];
-      const opponentWins = battle.roundWins[opponent];
       let text = `${header}\n\n*Tur ${battle.round} Netijesi!*\n`;
       if (winner === "draw") text += `🤝 Deňlik boldy!\n`;
       else text += `${roundWinner === player ? "🎉 Siz turda ýeňdiňiz!" : "😢 Siz turda utuldyňyz"}\n`;
-      text += `📊 Hesap: ${yourWins} - ${opponentWins}\n${boardText}`;
+      text += `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n${boardText}`;
       if (msgId) await editMessageText(player, msgId, text, { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" });
       else await sendMessage(player, text, { parse_mode: "Markdown" });
     }
@@ -874,14 +868,11 @@ async function handleCallback(cb: any) {
   battle.turn = battle.players.find((p: string) => p !== fromId)!;
   for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
     const header = headerForPlayer(battle, player);
-    const opponent = battle.players.find((p: string) => p !== player)!;
-    const yourWins = battle.roundWins[player];
-    const opponentWins = battle.roundWins[opponent];
     const yourTurn = battle.turn === player;
     const text =
       `${header}\n\n` +
       `*Tur: ${battle.round}/${battle.rounds}*\n` +
-      `📊 Hesap: ${yourWins} - ${opponentWins}\n` +
+      `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n` +
       `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}\n` +
       boardToText(battle.board);
     const msgId = battle.messageIds[player];
@@ -1147,7 +1138,7 @@ async function getUserCount(): Promise<number> {
 }
 
 // -------------------- Commands --------------------
-async function handleCommand(fromId: string, username: string | undefined, displayName: string, text: string, isNew: boolean = false) {
+async function handleCommand(fromId: string, username: string | undefined, displayName: string, text: string, isNew: boolean) {
   if (!(await isSubscribed(fromId))) {
     await sendMessage(fromId, "✨🤖 Boty ulanmak üçin bu kanallara agza bol!", {
       reply_markup: { inline_keyboard: [
