@@ -15,72 +15,23 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 const TOKEN = Deno.env.get("BOT_TOKEN")!;
 if (!TOKEN) throw new Error("BOT_TOKEN env var is required");
 const API = `https://api.telegram.org/bot${TOKEN}`;
-const SECRET_PATH = "/tkmxo";
-const CHANNEL = "TkmXO";
-const CHAT_CHANNEL = "TkmXOChat";
-const BOT_USERNAME = "TkmXOBot";
-const ADMIN_USERNAME = "Masakoff";
+const SECRET_PATH = "/tkmxo"; // make sure webhook path matches
+const CHANNEL = "@TkmXO";
+const CHAT_CHANNEL = "@TkmXOChat";
+const BOT_USERNAME = "TkmXOBot"; // Adjust to your bot's username
 
 // Deno KV
 const kv = await Deno.openKv();
 
+const ADMIN_USERNAME = "Masakoff"; // without @
+
+// runtime storages
 let queue: string[] = [];
 let trophyQueue: string[] = [];
 const battles: Record<string, any> = {};
 const searchTimeouts: Record<string, number> = {};
 
-// -------------------- Subscription check with retry and caching --------------------
-async function isSubscribed(userId: string, retries = 2, delay = 1000): Promise<boolean> {
-  // Check cache first
-  const cacheKey = ["subscription_cache", userId];
-  const cacheRes = await kv.get<{ isSubscribed: boolean; timestamp: number }>(cacheKey);
-  const cacheTTL = 5 * 60 * 1000; // 5 minutes TTL
-  if (cacheRes.value && Date.now() - cacheRes.value.timestamp < cacheTTL) {
-    return cacheRes.value.isSubscribed;
-  }
-
-  const channels = [CHANNEL, CHAT_CHANNEL];
-  for (const ch of channels) {
-    let attempt = 0;
-    while (attempt <= retries) {
-      try {
-        const res = await fetch(`${API}/getChatMember?chat_id=@${ch}&user_id=${userId}`);
-        const data = await res.json();
-        if (!data.ok) {
-          console.error(`isSubscribed: API error for ${ch}, user ${userId}: ${data.description}`);
-          if (attempt < retries) {
-            await new Promise(resolve => setTimeout(resolve, delay));
-            attempt++;
-            continue;
-          }
-          await kv.set(cacheKey, { isSubscribed: false, timestamp: Date.now() });
-          return false;
-        }
-        const status = data.result.status;
-        if (!['creator', 'administrator', 'member'].includes(status)) {
-          await kv.set(cacheKey, { isSubscribed: false, timestamp: Date.now() });
-          return false;
-        }
-        break; // Success, move to next channel
-      } catch (e) {
-        console.error(`isSubscribed: Fetch error for ${ch}, user ${userId}:`, e);
-        if (attempt < retries) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-          attempt++;
-          continue;
-        }
-        await kv.set(cacheKey, { isSubscribed: false, timestamp: Date.now() });
-        return false;
-      }
-    }
-  }
-
-  // Cache successful subscription check
-  await kv.set(cacheKey, { isSubscribed: true, timestamp: Date.now() });
-  return true;
-}
-
-// -------------------- State helpers --------------------
+// State helpers using KV
 async function getWithdrawalState(userId: string): Promise<{ amount: number; step: "amount" | "phone" } | null> {
   const res = await kv.get<{ amount: number; step: "amount" | "phone" }>(["states", "withdrawal", userId]);
   return res.value;
@@ -201,13 +152,31 @@ async function answerCallbackQuery(id: string, text = "", showAlert = false) {
   }
 }
 
+// -------------------- Subscription check --------------------
+async function isSubscribed(userId: string): Promise<boolean> {
+  const channels = [CHANNEL, CHAT_CHANNEL];
+  for (const ch of channels) {
+    try {
+      const res = await fetch(`${API}/getChatMember?chat_id=${ch}&user_id=${userId}`);
+      const data = await res.json();
+      if (!data.ok) return false;
+      const status = data.result.status;
+      if (!['creator', 'administrator', 'member'].includes(status)) return false;
+    } catch (e) {
+      console.error("isSubscribed error for " + ch, e);
+      return false;
+    }
+  }
+  return true;
+}
+
 // -------------------- Profile helpers --------------------
 type Profile = {
   id: string;
   username?: string;
   displayName: string;
   trophies: number;
-  tmt: number;
+  tmt: number; // TMT balance (number)
   gamesPlayed: number;
   wins: number;
   losses: number;
@@ -252,7 +221,7 @@ async function initProfile(userId: string, username?: string, displayName?: stri
       changed = true;
     }
     existing.lastActive = Date.now();
-    await kv.set(key, existing);
+    await kv.set(key, existing); // Always save to update lastActive
     return { profile: existing, isNew: false };
   }
 }
@@ -332,7 +301,7 @@ async function sendUserProfile(adminChatId: string, userId: string) {
 }
 
 // -------------------- Leaderboard helpers --------------------
-async function getLeaderboard(top = 10, offset = 0): Promise<{ top: Profile[], total: number }> {
+async function getLeaderboard(top = 10, offset = 0): Promise<{top: Profile[], total: number}> {
   const players: Profile[] = [];
   try {
     for await (const entry of kv.list({ prefix: ["profiles"] })) {
@@ -347,13 +316,13 @@ async function getLeaderboard(top = 10, offset = 0): Promise<{ top: Profile[], t
     return b.wins - a.wins;
   });
   const filtered = players.filter(p => !p.id.startsWith("boss_"));
-  return { top: filtered.slice(offset, offset + top), total: filtered.length };
+  return {top: filtered.slice(offset, offset + top), total: filtered.length};
 }
 
 async function sendLeaderboard(chatId: string, page = 0) {
   const perPage = 10;
   const offset = page * perPage;
-  const { top: topPlayers, total } = await getLeaderboard(perPage, offset);
+  const {top: topPlayers, total} = await getLeaderboard(perPage, offset);
 
   if (topPlayers.length === 0) {
     const msg = page === 0 ? "Entäk oýunçy ýok! Liderler tablosyna çykmak üçin oýna başlaň!" : "Indiki sahypa ýok!";
@@ -578,12 +547,12 @@ async function sendRoundStart(battle: any) {
   if (battle.idleTimerId) {
     clearTimeout(battle.idleTimerId);
   }
-  battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 3 * 60 * 1000);
+  battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 3 * 60 * 1000); // Reduced to 3 minutes
 
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
   }
-  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000);
+  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
 
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
@@ -689,7 +658,7 @@ async function makeBossMove(battle: any) {
   const mark = battle.marks[boss];
   const humanMark = battle.marks[user];
   const idx = computerMove(battle.board, mark, humanMark);
-  if (idx === -1) return;
+  if (idx === -1) return; // no move
 
   battle.board[idx] = mark;
 
@@ -718,6 +687,7 @@ async function makeBossMove(battle: any) {
     if (msgId) await editMessageText(user, msgId, text, { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" });
     else await sendMessage(user, text, { parse_mode: "Markdown" });
 
+    // Check if match over
     const neededWins = Math.ceil(battle.rounds / 2);
     if (battle.roundWins[user] >= neededWins || battle.roundWins[boss] >= neededWins || battle.round === battle.rounds) {
       if (battle.roundWins[user] > battle.roundWins[boss]) {
@@ -730,17 +700,19 @@ async function makeBossMove(battle: any) {
       return;
     }
 
+    // Next round
     battle.round++;
     battle.board = createEmptyBoard();
     battle.turn = battle.players[(battle.round - 1) % 2];
 
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000);
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
 
     await sendRoundStart(battle);
     return;
   }
 
+  // Update board for user
   battle.turn = user;
   const header = headerForPlayer(battle, user);
   const text =
@@ -769,7 +741,7 @@ async function handleCallback(cb: any) {
 
   if (data.startsWith("menu:")) {
     const cmd = data.split(":")[1];
-    await handleCommand(fromId, username, displayName, `/${cmd}`, false);
+    await handleCommand(fromId, username, displayName, `/${cmd}`);
     await answerCallbackQuery(callbackId);
     return;
   }
@@ -796,14 +768,15 @@ async function handleCallback(cb: any) {
     return;
   }
 
+  // Reset timers
   if (battle.idleTimerId) {
     clearTimeout(battle.idleTimerId);
-    battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 3 * 60 * 1000);
+    battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 3 * 60 * 1000); // Reduced to 3 minutes
   }
 
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000);
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
   }
 
   if (data === "surrender") {
@@ -864,6 +837,7 @@ async function handleCallback(cb: any) {
       else await sendMessage(player, text, { parse_mode: "Markdown" });
     }
 
+    // Check if match over
     const neededWins = Math.ceil(battle.rounds / 2);
     if (battle.roundWins[battle.players[0]] >= neededWins || battle.roundWins[battle.players[1]] >= neededWins || battle.round === battle.rounds) {
       if (battle.roundWins[battle.players[0]] > battle.roundWins[battle.players[1]]) {
@@ -877,18 +851,20 @@ async function handleCallback(cb: any) {
       return;
     }
 
+    // Next round
     battle.round++;
     battle.board = createEmptyBoard();
     battle.turn = battle.players[(battle.round - 1) % 2];
 
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000);
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
 
     await sendRoundStart(battle);
     await answerCallbackQuery(callbackId, "Hereket edildi!");
     return;
   }
 
+  // Continue
   battle.turn = battle.players.find((p: string) => p !== fromId)!;
   for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
     const header = headerForPlayer(battle, player);
@@ -1106,22 +1082,25 @@ async function sendStats(chatId: string) {
   let bossCount = 0;
   let bossBattlesPlayed = 0;
 
+  // Count users and sum stats
   for await (const entry of kv.list({ prefix: ["profiles"] })) {
     if (!entry.value) continue;
     const p = entry.value as Profile;
-    if (p.id.startsWith("boss_")) continue;
+    if (p.id.startsWith("boss_")) continue; // Exclude bosses
     userCount++;
     totalGamesPlayed += p.gamesPlayed || 0;
     totalTrophies += p.trophies || 0;
     totalTMT += p.tmt || 0;
   }
 
+  // Sum TMT from promocodes (assuming each use gives 1 TMT)
   for await (const entry of kv.list({ prefix: ["promocodes"] })) {
     if (!entry.value) continue;
     const promo = entry.value as { maxUses: number; currentUses: number };
     totalTMTFromPromos += promo.currentUses;
   }
 
+  // Count bosses and sum battles
   for await (const entry of kv.list({ prefix: ["bosses"] })) {
     if (!entry.value) continue;
     const boss = entry.value as { photoId: string; rounds: number; maxUses: number; currentUses: number; reward: number };
@@ -1162,17 +1141,15 @@ async function getUserCount(): Promise<number> {
 async function handleCommand(fromId: string, username: string | undefined, displayName: string, text: string, isNew: boolean) {
   if (!(await isSubscribed(fromId))) {
     await sendMessage(fromId, "✨🤖 Boty ulanmak üçin bu kanallara agza bol!", {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "TkmXO", url: `https://t.me/${CHANNEL}` }],
-          [{ text: "TkmXO Chat", url: `https://t.me/${CHAT_CHANNEL}` }],
-          [{ text: "Täzeden synanyş", callback_data: "menu:start" }]
-        ]
-      }
+      reply_markup: { inline_keyboard: [
+        [{ text: "TkmXO", url: "https://t.me/TkmXO" }],
+        [{ text: "TkmXO Chat", url: "https://t.me/TkmXOChat" }]
+      ] }
     });
     return;
   }
 
+  // Close any active states before handling new command
   if (await getWithdrawalState(fromId)) {
     await sendMessage(fromId, "Çykarma sahypasy ýapyldy");
     await setWithdrawalState(fromId, null);
@@ -1399,30 +1376,36 @@ async function handleCommand(fromId: string, username: string | undefined, displ
       return;
     }
     const userId = parts[1];
+    // Remove from queues
     queue = queue.filter(id => id !== userId);
     trophyQueue = trophyQueue.filter(id => id !== userId);
+    // Clear search timeout
     if (searchTimeouts[userId]) {
       clearTimeout(searchTimeouts[userId]);
       delete searchTimeouts[userId];
     }
+    // If in battle
     if (battles[userId]) {
       await endBattleIdle(battles[userId]);
     }
+    // Delete profile
     await kv.delete(["profiles", userId]);
+    // Delete used_promos
     for await (const entry of kv.list({ prefix: ["promocodes"] })) {
       const code = entry.key[1] as string;
       await kv.delete(["used_promos", code, userId]);
     }
+    // Delete played_boss
     for await (const entry of kv.list({ prefix: ["bosses"] })) {
       const name = entry.key[1] as string;
       await kv.delete(["played_boss", name, userId]);
     }
+    // Delete states
     await setWithdrawalState(userId, null);
     await setPromocodeState(userId, false);
     await setBossState(userId, false);
     await setCreateBossState(userId, false);
     await setGlobalMessageState(userId, false);
-    await kv.delete(["subscription_cache", userId]); // Clear subscription cache
     await sendMessage(fromId, `✅ Ulanyjy ID:${userId} öçürildi.`);
     return;
   }
@@ -1474,8 +1457,10 @@ serve(async (req: Request) => {
 
     const update = await req.json();
 
+    // handle normal messages
     if (update.message) {
       const msg = update.message;
+      if (msg.chat.type !== "private") return new Response("OK");
       const from = msg.from;
       const text = (msg.text || "").trim();
       const fromId = String(from.id);
@@ -1505,7 +1490,9 @@ serve(async (req: Request) => {
       } else {
         await sendMessage(fromId, "❓ Näbelli buýruk. /help gör.");
       }
-    } else if (update.callback_query) {
+    }
+    // handle callback queries
+    else if (update.callback_query) {
       await handleCallback(update.callback_query);
     }
 
