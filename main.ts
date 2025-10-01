@@ -739,6 +739,33 @@ async function handleCallback(cb: any) {
     return;
   }
 
+  if (data === "check_subscription") {
+    if (await isSubscribed(fromId)) {
+      const userCount = await getUserCount();
+      const helpText =
+        `🌟 Salam! TkmXO BOT-a hoş geldiňiz!\n\n` +
+        `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️\n\n` +
+        `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄\n\n` +
+        `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸\n\n` +
+        `👥 Umumy ulanyjy sany: ${userCount}\n\n` +
+        `🚀 Başlamak üçin aşakdaky düwmelerden birini saýla:`;
+      const mainMenu = {
+        inline_keyboard: [
+          [{ text: "⚔️ Kubok söweş", callback_data: "menu:battle" }, { text: "🏆 TMT söweş", callback_data: "menu:realbattle" }],
+          [{ text: "🤖 Boss söweş", callback_data: "menu:boss" }, { text: "🎟️ Promokod", callback_data: "menu:promocode" }],
+          [{ text: "📊 Profil", callback_data: "menu:profile" }, { text: "🏅 Liderler", callback_data: "menu:leaderboard" }],
+          [{ text: "💸 Puly çekmek", callback_data: "menu:withdraw" }],
+        ]
+      };
+      await sendMessage(fromId, helpText, { parse_mode: "Markdown", reply_markup: mainMenu });
+      await answerCallbackQuery(callbackId, "Hoş geldiňiz! Indi boty ulanyp bilersiňiz.");
+    } else {
+      await sendMessage(fromId, "❌ Entäk agza bolmadyňyz. Kanallara agza boluň we täzeden synanyşyň.");
+      await answerCallbackQuery(callbackId, "Agza bolmadyňyz.", true);
+    }
+    return;
+  }
+
   if (data.startsWith("menu:")) {
     const cmd = data.split(":")[1];
     await handleCommand(fromId, username, displayName, `/${cmd}`);
@@ -1143,7 +1170,8 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendMessage(fromId, "✨🤖 Boty ulanmak üçin bu kanallara agza bol!", {
       reply_markup: { inline_keyboard: [
         [{ text: "TkmXO", url: "https://t.me/TkmXO" }],
-        [{ text: "TkmXO Chat", url: "https://t.me/TkmXOChat" }]
+        [{ text: "TkmXO Chat", url: "https://t.me/TkmXOChat" }],
+        [{ text: "Agza boldum", callback_data: "check_subscription" }]
       ] }
     });
     return;
