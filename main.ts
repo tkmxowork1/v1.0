@@ -1143,8 +1143,7 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendMessage(fromId, "✨🤖 Boty ulanmak üçin bu kanallara agza bol!", {
       reply_markup: { inline_keyboard: [
         [{ text: "TkmXO", url: "https://t.me/TkmXO" }],
-        [{ text: "TkmXO Chat", url: "https://t.me/TkmXOChat" }],
-        [{ text: "TkmXO Toleg", url: "https://t.me/TkmXOToleg" }]
+        [{ text: "TkmXO Chat", url: "https://t.me/TkmXOChat" }]
       ] }
     });
     return;
