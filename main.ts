@@ -18,6 +18,7 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 const SECRET_PATH = "/tkmxo"; // make sure webhook path matches
 const CHANNEL = "@TkmXO";
 const CHAT_CHANNEL = "@TkmXOChat";
+const TOLEG_CHANNEL = "@TkmXOToleg";
 const BOT_USERNAME = "TkmXOBot"; // Adjust to your bot's username
 
 // Deno KV
@@ -154,14 +155,14 @@ async function answerCallbackQuery(id: string, text = "", showAlert = false) {
 
 // -------------------- Subscription check --------------------
 async function isSubscribed(userId: string): Promise<boolean> {
-  const channels = [CHANNEL, CHAT_CHANNEL];
+  const channels = [CHANNEL, CHAT_CHANNEL, TOLEG_CHANNEL];
   for (const ch of channels) {
     try {
       const res = await fetch(`${API}/getChatMember?chat_id=${ch}&user_id=${userId}`);
       const data = await res.json();
       if (!data.ok) return false;
       const status = data.result.status;
-      if (!['creator', 'administrator', 'member'].includes(status)) return false;
+      if (!['creator', 'administrator', 'member', 'restricted'].includes(status)) return false;
     } catch (e) {
       console.error("isSubscribed error for " + ch, e);
       return false;
@@ -734,35 +735,14 @@ async function handleCallback(cb: any) {
   const username = cb.from.username;
   const displayName = cb.from.first_name || cb.from.username || fromId;
 
-  if (!data) {
-    await answerCallbackQuery(callbackId);
+  const subscribed = await isSubscribed(fromId);
+  if (!subscribed) {
+    await answerCallbackQuery(callbackId, "Boty ulanmak üçin kanallara agza bol!", true);
     return;
   }
 
-  if (data === "check_subscription") {
-    if (await isSubscribed(fromId)) {
-      const userCount = await getUserCount();
-      const helpText =
-        `🌟 Salam! TkmXO BOT-a hoş geldiňiz!\n\n` +
-        `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️\n\n` +
-        `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄\n\n` +
-        `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸\n\n` +
-        `👥 Umumy ulanyjy sany: ${userCount}\n\n` +
-        `🚀 Başlamak üçin aşakdaky düwmelerden birini saýla:`;
-      const mainMenu = {
-        inline_keyboard: [
-          [{ text: "⚔️ Kubok söweş", callback_data: "menu:battle" }, { text: "🏆 TMT söweş", callback_data: "menu:realbattle" }],
-          [{ text: "🤖 Boss söweş", callback_data: "menu:boss" }, { text: "🎟️ Promokod", callback_data: "menu:promocode" }],
-          [{ text: "📊 Profil", callback_data: "menu:profile" }, { text: "🏅 Liderler", callback_data: "menu:leaderboard" }],
-          [{ text: "💸 Puly çekmek", callback_data: "menu:withdraw" }],
-        ]
-      };
-      await sendMessage(fromId, helpText, { parse_mode: "Markdown", reply_markup: mainMenu });
-      await answerCallbackQuery(callbackId, "Hoş geldiňiz! Indi boty ulanyp bilersiňiz.");
-    } else {
-      await sendMessage(fromId, "❌ Entäk agza bolmadyňyz. Kanallara agza boluň we täzeden synanyşyň.");
-      await answerCallbackQuery(callbackId, "Agza bolmadyňyz.", true);
-    }
+  if (!data) {
+    await answerCallbackQuery(callbackId);
     return;
   }
 
@@ -1171,7 +1151,7 @@ async function handleCommand(fromId: string, username: string | undefined, displ
       reply_markup: { inline_keyboard: [
         [{ text: "TkmXO", url: "https://t.me/TkmXO" }],
         [{ text: "TkmXO Chat", url: "https://t.me/TkmXOChat" }],
-        [{ text: "Agza boldum", callback_data: "check_subscription" }]
+        [{ text: "TkmXOToleg", url: "https://t.me/TkmXOToleg" }]
       ] }
     });
     return;
@@ -1494,6 +1474,18 @@ serve(async (req: Request) => {
       const fromId = String(from.id);
       const username = from.username;
       const displayName = from.first_name || from.username || fromId;
+
+      const subscribed = await isSubscribed(fromId);
+      if (!subscribed) {
+        await sendMessage(fromId, "✨🤖 Boty ulanmak üçin bu kanallara agza bol!", {
+          reply_markup: { inline_keyboard: [
+            [{ text: "TkmXO", url: "https://t.me/TkmXO" }],
+            [{ text: "TkmXO Chat", url: "https://t.me/TkmXOChat" }],
+            [{ text: "TkmXOToleg", url: "https://t.me/TkmXOToleg" }]
+          ] }
+        });
+        return new Response("OK");
+      }
 
       const { isNew } = await initProfile(fromId, username, displayName);
 
