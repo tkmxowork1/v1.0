@@ -16,8 +16,8 @@ const TOKEN = Deno.env.get("BOT_TOKEN")!;
 if (!TOKEN) throw new Error("BOT_TOKEN env var is required");
 const API = `https://api.telegram.org/bot${TOKEN}`;
 const SECRET_PATH = "/tkmxo"; // make sure webhook path matches
-const CHANNEL = "@TkmXO";
-const CHAT_CHANNEL = "@TkmXOChat";
+const CHANNEL = "TkmXO";
+const CHAT_CHANNEL = "TkmXOChat";
 const BOT_USERNAME = "TkmXOBot"; // Adjust to your bot's username
 
 // Deno KV
