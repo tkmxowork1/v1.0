@@ -1460,7 +1460,6 @@ serve(async (req: Request) => {
     // handle normal messages
     if (update.message) {
       const msg = update.message;
-      if (msg.chat.type !== "private") return new Response("OK");
       const from = msg.from;
       const text = (msg.text || "").trim();
       const fromId = String(from.id);
