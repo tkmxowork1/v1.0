@@ -23,7 +23,7 @@ const BOT_USERNAME = "TkmXOBot"; // Adjust to your bot's username
 // Deno KV
 const kv = await Deno.openKv();
 
-const ADMIN_USERNAME = "Masakoff"; // without @
+const ADMIN_USERNAME = "FlapsterMinerManager"; // without @
 
 // runtime storages
 let queue: string[] = [];
