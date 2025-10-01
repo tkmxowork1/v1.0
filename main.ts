@@ -161,7 +161,7 @@ async function isSubscribed(userId: string): Promise<boolean> {
       const data = await res.json();
       if (!data.ok) return false;
       const status = data.result.status;
-      if (!['creator', 'administrator', 'member', 'restricted'].includes(status)) return false;
+      if (!['creator', 'administrator', 'member'].includes(status)) return false;
     } catch (e) {
       console.error("isSubscribed error for " + ch, e);
       return false;
@@ -734,12 +734,6 @@ async function handleCallback(cb: any) {
   const username = cb.from.username;
   const displayName = cb.from.first_name || cb.from.username || fromId;
 
-  const subscribed = await isSubscribed(fromId);
-  if (!subscribed) {
-    await answerCallbackQuery(callbackId, "Boty ulanmak üçin kanallara agza bol!", true);
-    return;
-  }
-
   if (!data) {
     await answerCallbackQuery(callbackId);
     return;
@@ -809,7 +803,7 @@ async function handleCallback(cb: any) {
     return;
   }
   if (battle.board[idx] !== "") {
-    await answerCallbackQuery(callbackId, "Bu bu ýer eýýäm eýelenen.", true);
+    await answerCallbackQuery(callbackId, "Bu ýer eýýäm eýelenen.", true);
     return;
   }
 
@@ -1472,17 +1466,6 @@ serve(async (req: Request) => {
       const fromId = String(from.id);
       const username = from.username;
       const displayName = from.first_name || from.username || fromId;
-
-      const subscribed = await isSubscribed(fromId);
-      if (!subscribed) {
-        await sendMessage(fromId, "✨🤖 Boty ulanmak üçin bu kanallara agza bol!", {
-          reply_markup: { inline_keyboard: [
-            [{ text: "TkmXO", url: "https://t.me/TkmXO" }],
-            [{ text: "TkmXO Chat", url: "https://t.me/TkmXOChat" }]
-          ] }
-        });
-        return new Response("OK");
-      }
 
       const { isNew } = await initProfile(fromId, username, displayName);
 
