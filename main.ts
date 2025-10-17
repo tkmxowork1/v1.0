@@ -905,8 +905,8 @@ async function processReferral(userId: string) {
   const referrerId = pendingRes.value;
   const refProfile = await getProfile(referrerId);
   if (refProfile) {
-    await updateProfile(referrerId, { tmt: 0.2, referrals: 1 });
-    await sendMessage(referrerId, "✅ Täze referral! +0.2 TMT aldyňyz.");
+    await updateProfile(referrerId, { tmt: 0.05, referrals: 1 });
+    await sendMessage(referrerId, "✅ Täze referral! +0.05 TMT aldyňyz.");
     await sendMessage(userId, `Siz ID:${referrerId} tarapyndan çagyryldyňyz.`);
   }
   await kv.delete(["pending_referrals", userId]);
