@@ -741,23 +741,8 @@ async function handleCallback(cb: any) {
 
   if (data === "check_subscription") {
     if (await isSubscribed(fromId)) {
-      const userCount = await getUserCount();
-      const helpText =
-        `🌟 Salam! TkmXO BOT-a hoş geldiňiz!\n\n` +
-        `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️\n\n` +
-        `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄\n\n` +
-        `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸\n\n` +
-        `👥 Umumy ulanyjy sany: ${userCount}\n\n` +
-        `🚀 Başlamak üçin aşakdaky düwmelerden birini saýla:`;
-      const mainMenu = {
-        inline_keyboard: [
-          [{ text: "⚔️ Kubok söweş", callback_data: "menu:battle" }, { text: "🏆 TMT söweş", callback_data: "menu:realbattle" }],
-          [{ text: "🤖 Boss söweş", callback_data: "menu:boss" }, { text: "🎟️ Promokod", callback_data: "menu:promocode" }],
-          [{ text: "📊 Profil", callback_data: "menu:profile" }, { text: "🏅 Liderler", callback_data: "menu:leaderboard" }],
-          [{ text: "💸 Puly çekmek", callback_data: "menu:withdraw" }],
-        ]
-      };
-      await sendMessage(fromId, helpText, { parse_mode: "Markdown", reply_markup: mainMenu });
+      await processReferral(fromId);
+      await showHelpAndMenu(fromId);
       await answerCallbackQuery(callbackId, "Hoş geldiňiz! Indi boty ulanyp bilersiňiz.");
     } else {
       await sendMessage(fromId, "❌ Entäk agza bolmadyňyz. Kanallara agza boluň we täzeden synanyşyň.");
@@ -768,7 +753,7 @@ async function handleCallback(cb: any) {
 
   if (data.startsWith("menu:")) {
     const cmd = data.split(":")[1];
-    await handleCommand(fromId, username, displayName, `/${cmd}`);
+    await handleCommand(fromId, username, displayName, `/${cmd}`, false);
     await answerCallbackQuery(callbackId);
     return;
   }
@@ -911,6 +896,41 @@ async function handleCallback(cb: any) {
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
   }
+}
+
+// -------------------- Referral processing --------------------
+async function processReferral(userId: string) {
+  const pendingRes = await kv.get<string>(["pending_referrals", userId]);
+  if (!pendingRes.value) return;
+  const referrerId = pendingRes.value;
+  const refProfile = await getProfile(referrerId);
+  if (refProfile) {
+    await updateProfile(referrerId, { tmt: 0.2, referrals: 1 });
+    await sendMessage(referrerId, "✅ Täze referral! +0.2 TMT aldyňyz.");
+    await sendMessage(userId, `Siz ID:${referrerId} tarapyndan çagyryldyňyz.`);
+  }
+  await kv.delete(["pending_referrals", userId]);
+}
+
+// -------------------- Show help and menu --------------------
+async function showHelpAndMenu(fromId: string) {
+  const userCount = await getUserCount();
+  const helpText =
+    `🌟 Salam! TkmXO BOT-a hoş geldiňiz!\n\n` +
+    `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️\n\n` +
+    `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄\n\n` +
+    `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸\n\n` +
+    `👥 Umumy ulanyjy sany: ${userCount}\n\n` +
+    `🚀 Başlamak üçin aşakdaky düwmelerden birini saýla:`;
+  const mainMenu = {
+    inline_keyboard: [
+      [{ text: "⚔️ Kubok söweş", callback_data: "menu:battle" }, { text: "🏆 TMT söweş", callback_data: "menu:realbattle" }],
+      [{ text: "🤖 Boss söweş", callback_data: "menu:boss" }, { text: "🎟️ Promokod", callback_data: "menu:promocode" }],
+      [{ text: "📊 Profil", callback_data: "menu:profile" }, { text: "🏅 Liderler", callback_data: "menu:leaderboard" }],
+      [{ text: "💸 Puly çekmek", callback_data: "menu:withdraw" }],
+    ]
+  };
+  await sendMessage(fromId, helpText, { parse_mode: "Markdown", reply_markup: mainMenu });
 }
 
 // -------------------- Withdrawal functionality --------------------
@@ -1177,6 +1197,8 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     return;
   }
 
+  await processReferral(fromId);
+
   // Close any active states before handling new command
   if (await getWithdrawalState(fromId)) {
     await sendMessage(fromId, "Çykarma sahypasy ýapyldy");
@@ -1434,42 +1456,14 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await setBossState(userId, false);
     await setCreateBossState(userId, false);
     await setGlobalMessageState(userId, false);
+    // Delete pending referral
+    await kv.delete(["pending_referrals", userId]);
     await sendMessage(fromId, `✅ Ulanyjy ID:${userId} öçürildi.`);
     return;
   }
 
   if (text.startsWith("/start") || text.startsWith("/help")) {
-    let referrerId: string | undefined;
-    const parts = text.split(" ");
-    if (parts.length > 1) {
-      referrerId = parts[1];
-    }
-    if (referrerId && isNew && referrerId !== fromId) {
-      const refProfile = await getProfile(referrerId);
-      if (refProfile) {
-        await updateProfile(referrerId, { tmt: 0.2, referrals: 1 });
-        await sendMessage(referrerId, "✅ Täze referral! +0.2 TMT aldyňyz.");
-        await sendMessage(fromId, `Siz ID:${referrerId} tarapyndan çagyryldyňyz.`);
-      }
-    }
-
-    const userCount = await getUserCount();
-    const helpText =
-      `🌟 Salam! TkmXO BOT-a hoş geldiňiz!\n\n` +
-      `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️\n\n` +
-      `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄\n\n` +
-      `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸\n\n` +
-      `👥 Umumy ulanyjy sany: ${userCount}\n\n` +
-      `🚀 Başlamak üçin aşakdaky düwmelerden birini saýla:`;
-    const mainMenu = {
-      inline_keyboard: [
-        [{ text: "⚔️ Kubok söweş", callback_data: "menu:battle" }, { text: "🏆 TMT söweş", callback_data: "menu:realbattle" }],
-        [{ text: "🤖 Boss söweş", callback_data: "menu:boss" }, { text: "🎟️ Promokod", callback_data: "menu:promocode" }],
-        [{ text: "📊 Profil", callback_data: "menu:profile" }, { text: "🏅 Liderler", callback_data: "menu:leaderboard" }],
-        [{ text: "💸 Puly çekmek", callback_data: "menu:withdraw" }],
-      ]
-    };
-    await sendMessage(fromId, helpText, { parse_mode: "Markdown", reply_markup: mainMenu });
+    await showHelpAndMenu(fromId);
     return;
   }
 
@@ -1495,7 +1489,17 @@ serve(async (req: Request) => {
       const username = from.username;
       const displayName = from.first_name || from.username || fromId;
 
-      const { isNew } = await initProfile(fromId, username, displayName);
+      let referrerId: string | undefined;
+      if (text.startsWith("/start") && text.length > 6) {
+        const parts = text.split(/\s+/);
+        if (parts.length > 1) referrerId = parts[1];
+      }
+
+      const { profile, isNew } = await initProfile(fromId, username, displayName);
+
+      if (referrerId && isNew && referrerId !== fromId) {
+        await kv.set(["pending_referrals", fromId], referrerId);
+      }
 
       if (text.startsWith("/")) {
         await handleCommand(fromId, username, displayName, text, isNew);
