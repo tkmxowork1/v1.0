@@ -6,7 +6,7 @@
 // Withdrawal functionality (/withdraw)
 // New: Subscription check (@TkmXO), Promocodes, Boss battles (vs AI), Main menu with inline buttons
 // All messages in Turkmen language
-// New: Referral system - 0.2 TMT per new referral who starts the bot first time
+// New: Referral system - 0.05 TMT per new referral who starts the bot first time
 //
 // Notes: Requires BOT_TOKEN env var and Deno KV. Deploy as webhook at SECRET_PATH.
 
