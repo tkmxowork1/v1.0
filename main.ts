@@ -1114,14 +1114,10 @@ async function handleWithdrawal(fromId: string, text: string) {
         );
 
         const adminProfile = await getProfileByUsername(ADMIN_USERNAME);
-        if (adminProfile) {
-          const adminId = adminProfile.id;
-          const userDisplayName = getDisplayName(profile);
-          const adminMessage = `💰 *ÇYKARMA ISLEGI*\n\nUlanyjy: ${userDisplayName} (ID: ${fromId})\nMukdar: ${amount} TMT\nTelefon: ${phoneNumber}\n\nEl bilen işläň.`;
-          await sendMessage(adminId, adminMessage, { parse_mode: "Markdown" });
-        } else {
-          console.error("Admin profile not found for withdrawal notification.");
-        }
+        const adminId = adminProfile?.id || `@${ADMIN_USERNAME}`;
+        const userDisplayName = getDisplayName(profile);
+        const adminMessage = `💰 *ÇYKARMA ISLEGI*\n\nUlanyjy: ${userDisplayName} (ID: ${fromId})\nMukdar: ${amount} TMT\nTelefon: ${phoneNumber}\n\nEl bilen işläň.`;
+        await sendMessage(adminId, adminMessage, { parse_mode: "Markdown" });
 
         await setWithdrawalState(fromId, null);
       } catch (error) {
