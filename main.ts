@@ -30,6 +30,7 @@ let queue: string[] = [];
 let trophyQueue: string[] = [];
 const battles: Record<string, any> = {};
 const searchTimeouts: Record<string, number> = {};
+const groupMatches: Record<string, { chatId: string; players: Set<string>; messageId: number }> = {};
 
 // State helpers using KV
 async function getWithdrawalState(userId: string): Promise<{ amount: number; step: "amount" | "phone" } | null> {
@@ -168,6 +169,19 @@ async function isSubscribed(userId: string): Promise<boolean> {
     }
   }
   return true;
+}
+
+// -------------------- Group admin check --------------------
+async function isGroupAdmin(chatId: string, userId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API}/getChatAdministrators?chat_id=${chatId}`);
+    const data = await res.json();
+    if (!data.ok) return false;
+    return data.result.some((member: any) => member.user.id === parseInt(userId) && (member.status === 'creator' || member.status === 'administrator'));
+  } catch (e) {
+    console.error("isGroupAdmin error", e);
+    return false;
+  }
 }
 
 // -------------------- Profile helpers --------------------
@@ -438,7 +452,7 @@ function computerMove(board: string[], aiMark: string, humanMark: string): numbe
 }
 
 // -------------------- Battle control --------------------
-async function startBattle(p1: string, p2: string, isTrophyBattle: boolean = false, rounds: number = 3) {
+async function startBattle(p1: string, p2: string, isTrophyBattle: boolean = false, isFun: boolean = false, rounds: number = 3) {
   if (searchTimeouts[p1]) {
     clearTimeout(searchTimeouts[p1]);
     delete searchTimeouts[p1];
@@ -460,6 +474,7 @@ async function startBattle(p1: string, p2: string, isTrophyBattle: boolean = fal
     roundWins: { [p1]: 0, [p2]: 0 },
     isTrophyBattle: isTrophyBattle,
     isBoss: false,
+    isFun: isFun,
     rounds,
   };
   battles[p1] = battle;
@@ -468,7 +483,7 @@ async function startBattle(p1: string, p2: string, isTrophyBattle: boolean = fal
   await initProfile(p1);
   await initProfile(p2);
 
-  const battleTypeText = isTrophyBattle ? "🏆 *TMT üçin söweş*" : "⚔️ *Kubok üçin söweş*";
+  const battleTypeText = isFun ? "🕹️ *Group fun XO!*" : isTrophyBattle ? "🏆 *TMT üçin söweş*" : "⚔️ *Kubok üçin söweş*";
   const stakeText = isTrophyBattle ? "\n\nGoýumlar: Iki oýunçy hem 1 TMT goýýar. Ýeňiji +0.75 TMT alýar." : "";
 
   await sendMessage(p1, `${battleTypeText}\n\nSen ❌ (X).${stakeText}\n\n*Oýun tertibi:* ${rounds} turdan ybarat vs ID:${p2}`, { parse_mode: "Markdown" });
@@ -506,7 +521,7 @@ function headerForPlayer(battle: any, player: string) {
   const opponent = battle.players.find((p: string) => p !== player)!;
   const yourMark = battle.marks[player];
   const opponentMark = battle.marks[opponent];
-  const battleTypeText = battle.isBoss ? "🤖 *Boss bilen söweş*" : battle.isTrophyBattle ? "🏆 *TMT söweşi*" : "⚔️ *Kubok söweşi*";
+  const battleTypeText = battle.isBoss ? "🤖 *Boss bilen söweş*" : battle.isFun ? "🕹️ *Group fun XO*" : battle.isTrophyBattle ? "🏆 *TMT söweşi*" : "⚔️ *Kubok söweşi*";
   const opponentDisplay = battle.isBoss ? battle.bossName : `ID:${opponent}`;
   return `${battleTypeText} — Sen (${yourMark}) vs ${opponentDisplay} (${opponentMark})`;
 }
@@ -626,10 +641,10 @@ async function finishMatch(battle: any, result: { winner?: string; loser?: strin
       await initProfile(winner);
       if (!loser.startsWith("boss_")) await initProfile(loser);
 
-      await updateProfile(winner, { gamesPlayed: 1, wins: 1, trophies: battle.isBoss ? 0 : 1 });
-      if (!loser.startsWith("boss_")) await updateProfile(loser, { gamesPlayed: 1, losses: 1, trophies: -1 });
-      await sendMessage(winner, `🎉 Siz ýeňdiňiz!\n🏆 *+1 kubok* (vs ${battle.isBoss ? battle.bossName : `ID:${loser}`})`, { parse_mode: "Markdown" });
-      if (!loser.startsWith("boss_")) await sendMessage(loser, `😢 Siz utuldyňyz.\n🏆 *-1 kubok* (vs ID:${winner})`, { parse_mode: "Markdown" });
+      await updateProfile(winner, { gamesPlayed: 1, wins: 1, trophies: (battle.isBoss || battle.isFun) ? 0 : 1 });
+      if (!loser.startsWith("boss_")) await updateProfile(loser, { gamesPlayed: 1, losses: 1, trophies: (battle.isBoss || battle.isFun) ? 0 : -1 });
+      await sendMessage(winner, `🎉 Siz ýeňdiňiz!\n🏆 *${(battle.isBoss || battle.isFun) ? "No kubok" : "+1 kubok"}* (vs ${battle.isBoss ? battle.bossName : `ID:${loser}`})`, { parse_mode: "Markdown" });
+      if (!loser.startsWith("boss_")) await sendMessage(loser, `😢 Siz utuldyňyz.\n🏆 *${(battle.isBoss || battle.isFun) ? "No kubok" : "-1 kubok"}* (vs ID:${winner})`, { parse_mode: "Markdown" });
 
       if (battle.isTrophyBattle) {
         await updateProfile(winner, { tmt: 1.75 });
@@ -762,6 +777,34 @@ async function handleCallback(cb: any) {
     const page = parseInt(data.split(":")[1]) || 0;
     await sendLeaderboard(fromId, page);
     await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (data.startsWith("join_group_match:")) {
+    const groupChatId = data.split(":")[1];
+    const match = groupMatches[groupChatId];
+    if (!match) {
+      await answerCallbackQuery(callbackId, "No active match.", true);
+      return;
+    }
+    if (match.players.has(fromId)) {
+      await answerCallbackQuery(callbackId, "You already joined.", true);
+      return;
+    }
+    match.players.add(fromId);
+    await answerCallbackQuery(callbackId, "You joined the match!");
+    const playersDisplays = await Promise.all(Array.from(match.players).map(async id => {
+      const profile = await getProfile(id);
+      return profile ? getDisplayName(profile) : `ID:${id}`;
+    }));
+    const updatedText = `Group XO match for fun! Joined: ${playersDisplays.join(", ")}\nWaiting for 2 players...`;
+    await editMessageText(groupChatId, match.messageId, updatedText, { reply_markup: { inline_keyboard: [[{ text: "Join Match", callback_data: `join_group_match:${groupChatId}` }]] } });
+    if (match.players.size === 2) {
+      const [p1, p2] = Array.from(match.players);
+      await startBattle(p1, p2, false, true);
+      await editMessageText(groupChatId, match.messageId, `Match started between ${playersDisplays.join(" and ")}!`, { reply_markup: { inline_keyboard: [] } });
+      delete groupMatches[groupChatId];
+    }
     return;
   }
 
@@ -1184,6 +1227,24 @@ async function getUserCount(): Promise<number> {
   return count;
 }
 
+// -------------------- Group match handler --------------------
+async function handleGroupMatch(chatId: string, fromId: string) {
+  if (groupMatches[chatId]) {
+    await sendMessage(chatId, "Already a match ongoing.");
+    return;
+  }
+  if (!(await isGroupAdmin(chatId, fromId))) {
+    await sendMessage(chatId, "Only group admins can start a group match.");
+    return;
+  }
+  const msgText = "Group XO match for fun! Click to join.";
+  const keyboard = { inline_keyboard: [[{ text: "Join Match", callback_data: `join_group_match:${chatId}` }]] };
+  const messageId = await sendMessage(chatId, msgText, { reply_markup: keyboard });
+  if (messageId) {
+    groupMatches[chatId] = { chatId, players: new Set(), messageId };
+  }
+}
+
 // -------------------- Commands --------------------
 async function handleCommand(fromId: string, username: string | undefined, displayName: string, text: string, isNew: boolean) {
   if (!(await isSubscribed(fromId))) {
@@ -1482,12 +1543,13 @@ serve(async (req: Request) => {
     // handle normal messages
     if (update.message) {
       const msg = update.message;
-      if (msg.chat.type !== "private") return new Response("OK");
+      const chatType = msg.chat.type;
+      const chatId = String(msg.chat.id);
       const from = msg.from;
-      const text = (msg.text || "").trim();
       const fromId = String(from.id);
       const username = from.username;
       const displayName = from.first_name || from.username || fromId;
+      const text = (msg.text || "").trim();
 
       let referrerId: string | undefined;
       if (text.startsWith("/start") && text.length > 6) {
@@ -1502,25 +1564,34 @@ serve(async (req: Request) => {
       }
 
       if (text.startsWith("/")) {
-        await handleCommand(fromId, username, displayName, text, isNew);
-      } else if (await getGlobalMessageState(fromId)) {
-        await setGlobalMessageState(fromId, false);
-        for await (const entry of kv.list({ prefix: ["profiles"] })) {
-          const profile = entry.value as Profile;
-          if (!profile) continue;
-          await sendMessage(profile.id, `📢 *Global habar:*\n\n${text}`, { parse_mode: "Markdown" });
+        if (chatType === "private") {
+          await handleCommand(fromId, username, displayName, text, isNew);
+        } else if (chatType === "group" || chatType === "supergroup") {
+          if (text.startsWith("/groupmatch")) {
+            await handleGroupMatch(chatId, fromId);
+          }
         }
-        await sendMessage(fromId, "✅ Global habar iberildi!");
-      } else if (await getWithdrawalState(fromId)) {
-        await handleWithdrawal(fromId, text);
-      } else if (await getPromocodeState(fromId)) {
-        await handlePromocodeInput(fromId, text);
-      } else if (await getBossState(fromId)) {
-        await handleBossInput(fromId, text);
-      } else if (await getCreateBossState(fromId) && msg.photo) {
-        await handleCreateBoss(msg, fromId);
-      } else {
-        await sendMessage(fromId, "❓ Näbelli buýruk. /help gör.");
+        return;
+      } else if (chatType === "private") {
+        if (await getGlobalMessageState(fromId)) {
+          await setGlobalMessageState(fromId, false);
+          for await (const entry of kv.list({ prefix: ["profiles"] })) {
+            const profile = entry.value as Profile;
+            if (!profile) continue;
+            await sendMessage(profile.id, `📢 *Global habar:*\n\n${text}`, { parse_mode: "Markdown" });
+          }
+          await sendMessage(fromId, "✅ Global habar iberildi!");
+        } else if (await getWithdrawalState(fromId)) {
+          await handleWithdrawal(fromId, text);
+        } else if (await getPromocodeState(fromId)) {
+          await handlePromocodeInput(fromId, text);
+        } else if (await getBossState(fromId)) {
+          await handleBossInput(fromId, text);
+        } else if (await getCreateBossState(fromId) && msg.photo) {
+          await handleCreateBoss(msg, fromId);
+        } else {
+          await sendMessage(fromId, "❓ Näbelli buýruk. /help gör.");
+        }
       }
     }
     // handle callback queries
