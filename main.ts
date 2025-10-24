@@ -193,7 +193,7 @@ function getDisplayName(p: Profile) {
 async function getMention(userId: string): Promise<string> {
   const p = await getProfile(userId);
   if (!p) return `ID:${userId}`;
-  const display = p.username ? `@${p.username}` : p.displayName || `ID:${p.id}`;
+  const display = p.username ? p.username : p.displayName || `ID:${p.id}`;
   const link = p.username ? `https://t.me/${p.username}` : `tg://user?id=${p.id}`;
   return `[${display}](${link})`;
 }
@@ -338,7 +338,7 @@ async function sendLeaderboard(chatId: string) {
   let msg = `🏆 *Liderler*\n\n`;
   topPlayers.forEach((p, i) => {
     const rankNum = i + 1;
-    const display = p.username ? `@${p.username}` : p.displayName || `ID:${p.id}`;
+    const display = p.username ? p.username : p.displayName || `ID:${p.id}`;
     const link = p.username ? `https://t.me/${p.username}` : `tg://user?id=${p.id}`;
     const winRate = p.gamesPlayed ? ((p.wins / p.gamesPlayed) * 100).toFixed(1) : "0";
     msg += `*${rankNum}.* [${display}](${link}) — 🏆 *${p.trophies}* | 📈 *${winRate}%*\n`;
