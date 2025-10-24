@@ -392,48 +392,46 @@ function makeInlineKeyboard(board: string[], disabled = false) {
   return { inline_keyboard: keyboard };
 }
 
-// -------------------- AI for Boss (Minimax) --------------------
-function minimax(newBoard: string[], player: string, aiMark: string, humanMark: string): { score: number; index?: number } {
+// -------------------- AI for Boss (Minimax with alpha-beta pruning and depth optimization) --------------------
+function minimax(newBoard: string[], player: string, aiMark: string, humanMark: string, alpha: number = -Infinity, beta: number = Infinity, depth: number = 0): { score: number; index?: number } {
   const availSpots = newBoard.map((val, idx) => val === "" ? idx : null).filter(v => v !== null) as number[];
 
   const result = checkWin(newBoard);
-  if (result?.winner === aiMark) return { score: 10 };
-  if (result?.winner === humanMark) return { score: -10 };
+  if (result?.winner === aiMark) return { score: 10 - depth };
+  if (result?.winner === humanMark) return { score: -10 + depth };
   if (result?.winner === "draw") return { score: 0 };
 
-  const moves: { index: number; score: number }[] = [];
+  let bestScore = player === aiMark ? -Infinity : Infinity;
+  let bestIndex: number | undefined;
 
   for (const index of availSpots) {
     newBoard[index] = player;
-    const score = minimax(newBoard, player === aiMark ? humanMark : aiMark, aiMark, humanMark).score;
-    moves.push({ index, score });
+    const score = minimax(newBoard, player === aiMark ? humanMark : aiMark, aiMark, humanMark, alpha, beta, depth + 1).score;
     newBoard[index] = "";
+
+    if (player === aiMark && score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    } else if (player !== aiMark && score < bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+
+    if (player === aiMark) {
+      alpha = Math.max(alpha, bestScore);
+    } else {
+      beta = Math.min(beta, bestScore);
+    }
+
+    if (alpha >= beta) break;
   }
 
-  let bestMove;
-  if (player === aiMark) {
-    let bestScore = -Infinity;
-    for (const move of moves) {
-      if (move.score > bestScore) {
-        bestScore = move.score;
-        bestMove = move;
-      }
-    }
-  } else {
-    let bestScore = Infinity;
-    for (const move of moves) {
-      if (move.score < bestScore) {
-        bestScore = move.score;
-        bestMove = move;
-      }
-    }
-  }
-  return bestMove ?? { score: 0 };
+  return { score: bestScore, index: bestIndex };
 }
 
 function computerMove(board: string[], aiMark: string, humanMark: string): number {
-  const result = minimax([...board], aiMark, aiMark, humanMark);
-  return result.index ?? -1;
+  const { index } = minimax([...board], aiMark, aiMark, humanMark, -Infinity, Infinity, 0);
+  return index ?? -1;
 }
 
 // -------------------- Battle control --------------------
