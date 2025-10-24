@@ -194,7 +194,7 @@ async function getMention(userId: string): Promise<string> {
   const p = await getProfile(userId);
   if (!p) return `ID:${userId}`;
   const name = getDisplayName(p);
-  return `[${name}]`;                 //return `[${name}](tg://user?id=${p.id})`;
+  return `[${name}](${p.username})`;                 //return `[${name}](tg://user?id=${p.id})`;
 }
 
 async function initProfile(userId: string, username?: string, displayName?: string): Promise<{ profile: Profile; isNew: boolean }> {
