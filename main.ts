@@ -326,32 +326,24 @@ async function getLeaderboard(top = 10, offset = 0): Promise<{top: Profile[], to
   return {top: filtered.slice(offset, offset + top), total: filtered.length};
 }
 
-async function sendLeaderboard(chatId: string, page = 0) {
-  const perPage = 10;
-  const offset = page * perPage;
-  const {top: topPlayers, total} = await getLeaderboard(perPage, offset);
+async function sendLeaderboard(chatId: string) {
+  const {top: topPlayers} = await getLeaderboard(10, 0);
 
   if (topPlayers.length === 0) {
-    const msg = page === 0 ? "Entäk oýunçy ýok! Liderler tablosyna çykmak üçin oýna başlaň!" : "Indiki sahypa ýok!";
-    await sendMessage(chatId, msg);
+    await sendMessage(chatId, "Entäk oýunçy ýok! Liderler tablosyna çykmak üçin oýna başlaň!");
     return;
   }
 
-  let msg = `🏆 *Liderler* — Sahypa ${page + 1}\n\n`;
+  let msg = `🏆 *Liderler*\n\n`;
   topPlayers.forEach((p, i) => {
-    const rankNum = offset + i + 1;
+    const rankNum = i + 1;
     const name = getDisplayName(p);
+    const link = p.username ? `https://t.me/${p.username}` : `tg://user?id=${p.id}`;
     const winRate = p.gamesPlayed ? ((p.wins / p.gamesPlayed) * 100).toFixed(1) : "0";
-    msg += `*${rankNum}.* [${name}](tg://user?id=${p.id}) — 🏆 *${p.trophies}* | 📈 *${winRate}%*\n`;
+    msg += `*${rankNum}.* [${name}](${link}) — 🏆 *${p.trophies}* | 📈 *${winRate}%*\n`;
   });
 
-  const keyboard: any = { inline_keyboard: [] };
-  const row: any[] = [];
-  if (page > 0) row.push({ text: "⬅️ Öňki", callback_data: `leaderboard:${page - 1}` });
-  if (offset + topPlayers.length < total) row.push({ text: "Indiki ➡️", callback_data: `leaderboard:${page + 1}` });
-  if (row.length) keyboard.inline_keyboard.push(row);
-
-  await sendMessage(chatId, msg, { reply_markup: keyboard, parse_mode: "Markdown" });
+  await sendMessage(chatId, msg, { parse_mode: "Markdown" });
 }
 
 // -------------------- Game logic --------------------
@@ -823,13 +815,6 @@ async function handleCallback(cb: any) {
   if (data.startsWith("menu:")) {
     const cmd = data.split(":")[1];
     await handleCommand(fromId, username, displayName, `/${cmd}`, false);
-    await answerCallbackQuery(callbackId);
-    return;
-  }
-
-  if (data.startsWith("leaderboard:")) {
-    const page = parseInt(data.split(":")[1]) || 0;
-    await sendLeaderboard(fromId, page);
     await answerCallbackQuery(callbackId);
     return;
   }
@@ -1437,7 +1422,7 @@ async function handleCommand(fromId: string, username: string | undefined, displ
   }
 
   if (text.startsWith("/leaderboard")) {
-    await sendLeaderboard(fromId, 0);
+    await sendLeaderboard(fromId);
     return;
   }
 
