@@ -882,6 +882,7 @@ async function handleCallback(cb: any) {
   }
 
   if (data === "surrender") {
+    await answerCallbackQuery(callbackId, "Siz tabşyrdyňyz."); // Answer early
     const opponent = battle.players.find((p: string) => p !== fromId)!;
     if (battle.isGroup) {
       const fromMention = await getMention(fromId);
@@ -893,7 +894,6 @@ async function handleCallback(cb: any) {
       if (!battle.isBoss) await sendMessage(opponent, "🏳️ Garşydaş tabşyrdy. Siz ýeňdiňiz!");
     }
     await finishMatch(battle, { winner: opponent, loser: fromId });
-    await answerCallbackQuery(callbackId, "Siz tabşyrdyňyz.");
     return;
   }
 
@@ -915,6 +915,8 @@ async function handleCallback(cb: any) {
     await answerCallbackQuery(callbackId, "Bu ýer eýýäm eýelenen.", true);
     return;
   }
+
+  await answerCallbackQuery(callbackId, "Hereket edildi!"); // Answer early to improve responsiveness
 
   const mark = battle.marks[fromId];
   battle.board[idx] = mark;
@@ -972,7 +974,6 @@ async function handleCallback(cb: any) {
       } else {
         await finishMatch(battle, { draw: true });
       }
-      await answerCallbackQuery(callbackId);
       return;
     }
 
@@ -985,7 +986,6 @@ async function handleCallback(cb: any) {
     battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
 
     await sendRoundStart(battle);
-    await answerCallbackQuery(callbackId, "Hereket edildi!");
     return;
   }
 
@@ -1021,7 +1021,6 @@ async function handleCallback(cb: any) {
       else await sendMessage(player, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
     }
   }
-  await answerCallbackQuery(callbackId, "Hereket edildi!");
 
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
