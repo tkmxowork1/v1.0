@@ -637,7 +637,7 @@ async function finishMatch(battle: any, result: { winner?: string; loser?: strin
         text = `${header}\n\n*Oýun Netijesi:* 🤝 *Deňlik!*\n${boardToText(battle.board)}`;
       } else {
         const winnerMention = await getMention(result.winner!);
-        text = `${header}\n\n*Oýun Netijesi:* 🎉 *${winnerMention} ýeňdi!*\n${boardToText(battle.board)}`;
+        text = `${header}\n\n*Oýun Netijesi:* 🎉 * ${winnerMention} ýeňdi!*\n${boardToText(battle.board)}`;
       }
       if (msgId) {
         await editMessageText(battle.groupChatId, msgId, text, { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" });
