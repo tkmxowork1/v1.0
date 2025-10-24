@@ -882,7 +882,6 @@ async function handleCallback(cb: any) {
   }
 
   if (data === "surrender") {
-    await answerCallbackQuery(callbackId, "Siz tabşyrdyňyz."); // Answer early
     const opponent = battle.players.find((p: string) => p !== fromId)!;
     if (battle.isGroup) {
       const fromMention = await getMention(fromId);
@@ -894,6 +893,7 @@ async function handleCallback(cb: any) {
       if (!battle.isBoss) await sendMessage(opponent, "🏳️ Garşydaş tabşyrdy. Siz ýeňdiňiz!");
     }
     await finishMatch(battle, { winner: opponent, loser: fromId });
+    await answerCallbackQuery(callbackId, "Siz tabşyrdyňyz.");
     return;
   }
 
@@ -915,8 +915,6 @@ async function handleCallback(cb: any) {
     await answerCallbackQuery(callbackId, "Bu ýer eýýäm eýelenen.", true);
     return;
   }
-
-  await answerCallbackQuery(callbackId, "Hereket edildi!"); // Answer early to improve responsiveness
 
   const mark = battle.marks[fromId];
   battle.board[idx] = mark;
@@ -974,6 +972,7 @@ async function handleCallback(cb: any) {
       } else {
         await finishMatch(battle, { draw: true });
       }
+      await answerCallbackQuery(callbackId);
       return;
     }
 
@@ -986,6 +985,7 @@ async function handleCallback(cb: any) {
     battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
 
     await sendRoundStart(battle);
+    await answerCallbackQuery(callbackId, "Hereket edildi!");
     return;
   }
 
@@ -1021,6 +1021,7 @@ async function handleCallback(cb: any) {
       else await sendMessage(player, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
     }
   }
+  await answerCallbackQuery(callbackId, "Hereket edildi!");
 
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
@@ -1048,7 +1049,7 @@ async function showHelpAndMenu(fromId: string) {
     `🌟 Salam! TkmXO BOT-a hoş geldiňiz!\n\n` +
     `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️\n\n` +
     `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄\n\n` +
-    `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸\n\n` +
+    `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.05 TMT gazanyň. 💸\n\n` +
     `👥 Umumy ulanyjy sany: ${userCount}\n\n` +
     `🚀 Başlamak üçin aşakdaky düwmelerden birini saýla:`;
   const mainMenu = {
@@ -1113,10 +1114,14 @@ async function handleWithdrawal(fromId: string, text: string) {
         );
 
         const adminProfile = await getProfileByUsername(ADMIN_USERNAME);
-        const adminId = adminProfile?.id || `@${ADMIN_USERNAME}`;
-        const userDisplayName = getDisplayName(profile);
-        const adminMessage = `💰 *ÇYKARMA ISLEGI*\n\nUlanyjy: ${userDisplayName} (ID: ${fromId})\nMukdar: ${amount} TMT\nTelefon: ${phoneNumber}\n\nEl bilen işläň.`;
-        await sendMessage(adminId, adminMessage, { parse_mode: "Markdown" });
+        if (adminProfile) {
+          const adminId = adminProfile.id;
+          const userDisplayName = getDisplayName(profile);
+          const adminMessage = `💰 *ÇYKARMA ISLEGI*\n\nUlanyjy: ${userDisplayName} (ID: ${fromId})\nMukdar: ${amount} TMT\nTelefon: ${phoneNumber}\n\nEl bilen işläň.`;
+          await sendMessage(adminId, adminMessage, { parse_mode: "Markdown" });
+        } else {
+          console.error("Admin profile not found for withdrawal notification.");
+        }
 
         await setWithdrawalState(fromId, null);
       } catch (error) {
