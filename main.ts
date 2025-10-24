@@ -388,7 +388,9 @@ function makeInlineKeyboard(board: string[], disabled = false) {
     }
     keyboard.push(row);
   }
-  keyboard.push([{ text: "🏳️ Tabşyrmak", callback_data: "surrender" }]);
+  if (!disabled) {
+    keyboard.push([{ text: "🏳️ Tabşyrmak", callback_data: "surrender" }]);
+  }
   return { inline_keyboard: keyboard };
 }
 
