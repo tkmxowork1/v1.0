@@ -396,7 +396,7 @@ function makeInlineKeyboard(board: string[], disabled = false) {
       const i = r * 3 + c;
       const cell = board[i];
       let text = cell === "X" ? "❌" : cell === "O" ? "⭕" : `${i + 1}`;
-      const callback_data = disabled ? "noop" : `move:${i}`;
+      const callback_data = disabled || cell !== "" ? "noop" : `move:${i}`;
       row.push({ text, callback_data });
     }
     keyboard.push(row);
@@ -570,8 +570,14 @@ async function sendRoundStart(battle: any) {
       `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}\n` +
       `🎲 Hereket: ${turnMention}\n` +
       boardToText(battle.board);
-    const msgId = await sendMessage(battle.groupChatId, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
-    if (msgId) battle.messageIds['group'] = msgId;
+    const msgId = battle.messageIds['group'];
+    const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+    if (msgId) {
+      await editMessageText(battle.groupChatId, msgId, text, options);
+    } else {
+      const newMsgId = await sendMessage(battle.groupChatId, text, options);
+      if (newMsgId) battle.messageIds['group'] = newMsgId;
+    }
   } else {
     for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
       const header = headerForPlayer(battle, player);
@@ -582,8 +588,14 @@ async function sendRoundStart(battle: any) {
         `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n` +
         `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}\n` +
         boardToText(battle.board);
-      const msgId = await sendMessage(player, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
-      if (msgId) battle.messageIds[player] = msgId;
+      const msgId = battle.messageIds[player];
+      const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+      if (msgId) {
+        await editMessageText(player, msgId, text, options);
+      } else {
+        const newMsgId = await sendMessage(player, text, options);
+        if (newMsgId) battle.messageIds[player] = newMsgId;
+      }
     }
   }
 
@@ -595,7 +607,7 @@ async function sendRoundStart(battle: any) {
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
   }
-  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000); // Increased to 60 seconds for slow internet
+  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
 
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
@@ -758,8 +770,9 @@ async function makeBossMove(battle: any) {
     if (winner === "draw") text += `🤝 Deňlik boldy!\n`;
     else text += `${roundWinner === user ? "🎉 Siz turda ýeňdiňiz!" : "😢 Siz turda utuldyňyz"}\n`;
     text += `📊 Hesap: ${battle.roundWins[user]} - ${battle.roundWins[boss]}\n${boardText}`;
-    if (msgId) await editMessageText(user, msgId, text, { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" });
-    else await sendMessage(user, text, { parse_mode: "Markdown" });
+    const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
+    if (msgId) await editMessageText(user, msgId, text, options);
+    else await sendMessage(user, text, options);
 
     // Check if match over
     const neededWins = Math.ceil(battle.rounds / 2);
@@ -774,13 +787,16 @@ async function makeBossMove(battle: any) {
       return;
     }
 
+    // Delay before next round
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     // Next round
     battle.round++;
     battle.board = createEmptyBoard();
     battle.turn = battle.players[(battle.round - 1) % 2];
 
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000); // Increased to 60 seconds for slow internet
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
 
     await sendRoundStart(battle);
     return;
@@ -796,8 +812,9 @@ async function makeBossMove(battle: any) {
     `🎲 Hereket: *Seniň hereketiň*\n` +
     boardToText(battle.board);
   const msgId = battle.messageIds[user];
-  if (msgId) await editMessageText(user, msgId, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
-  else await sendMessage(user, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
+  const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+  if (msgId) await editMessageText(user, msgId, text, options);
+  else await sendMessage(user, text, options);
 }
 
 // -------------------- Callback handler --------------------
@@ -885,7 +902,7 @@ async function handleCallback(cb: any) {
 
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000); // Increased to 60 seconds for slow internet
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
   }
 
   if (data === "surrender") {
@@ -954,8 +971,9 @@ async function handleCallback(cb: any) {
         text += `🎉 ${roundWinnerMention} turda ýeňdi!\n`;
       }
       text += `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}\n${boardText}`;
-      if (msgId) await editMessageText(battle.groupChatId, msgId, text, { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" });
-      else await sendMessage(battle.groupChatId, text, { parse_mode: "Markdown" });
+      const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
+      if (msgId) await editMessageText(battle.groupChatId, msgId, text, options);
+      else await sendMessage(battle.groupChatId, text, options);
     } else {
       for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
         const msgId = battle.messageIds[player];
@@ -964,8 +982,9 @@ async function handleCallback(cb: any) {
         if (winner === "draw") text += `🤝 Deňlik boldy!\n`;
         else text += `${roundWinner === player ? "🎉 Siz turda ýeňdiňiz!" : "😢 Siz turda utuldyňyz"}\n`;
         text += `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n${boardText}`;
-        if (msgId) await editMessageText(player, msgId, text, { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" });
-        else await sendMessage(player, text, { parse_mode: "Markdown" });
+        const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
+        if (msgId) await editMessageText(player, msgId, text, options);
+        else await sendMessage(player, text, options);
       }
     }
 
@@ -983,13 +1002,16 @@ async function handleCallback(cb: any) {
       return;
     }
 
+    // Delay before next round
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     // Next round
     battle.round++;
     battle.board = createEmptyBoard();
     battle.turn = battle.players[(battle.round - 1) % 2];
 
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000); // Increased to 60 seconds for slow internet
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
 
     await sendRoundStart(battle);
     await answerCallbackQuery(callbackId, "Hereket edildi!");
@@ -1011,8 +1033,9 @@ async function handleCallback(cb: any) {
       `🎲 Hereket: ${turnMention}\n` +
       boardToText(battle.board);
     const msgId = battle.messageIds['group'];
-    if (msgId) await editMessageText(battle.groupChatId, msgId, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
-    else await sendMessage(battle.groupChatId, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
+    const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+    if (msgId) await editMessageText(battle.groupChatId, msgId, text, options);
+    else await sendMessage(battle.groupChatId, text, options);
   } else {
     for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
       const header = headerForPlayer(battle, player);
@@ -1024,8 +1047,9 @@ async function handleCallback(cb: any) {
         `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}\n` +
         boardToText(battle.board);
       const msgId = battle.messageIds[player];
-      if (msgId) await editMessageText(player, msgId, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
-      else await sendMessage(player, text, { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" });
+      const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+      if (msgId) await editMessageText(player, msgId, text, options);
+      else await sendMessage(player, text, options);
     }
   }
   await answerCallbackQuery(callbackId, "Hereket edildi!");
