@@ -30,6 +30,7 @@ let queue: string[] = [];
 let trophyQueue: string[] = [];
 const battles: Record<string, any> = {};
 const searchTimeouts: Record<string, number> = {};
+const groupMatches: Record<string, {msgId: number, groupId: string, timeoutId: number}> = {};
 
 // State helpers using KV
 async function getWithdrawalState(userId: string): Promise<{ amount: number; step: "amount" | "phone" } | null> {
@@ -137,6 +138,18 @@ async function editMessageText(chatId: string | number, messageId: number, text:
     });
   } catch (e) {
     console.warn("editMessageText failed", e?.message ?? e);
+  }
+}
+
+async function deleteMessage(chatId: string | number, messageId: number) {
+  try {
+    await fetch(`${API}/deleteMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+    });
+  } catch (e) {
+    console.warn("deleteMessage failed", e);
   }
 }
 
@@ -836,6 +849,15 @@ async function handleCallback(cb: any) {
     }
     await initProfile(joiner, username, displayName);
     await startBattle(starter, joiner, false, 3, true, groupId);
+    // Delete the join message
+    if (cb.message && cb.message.message_id && cb.message.chat.id) {
+      await deleteMessage(cb.message.chat.id, cb.message.message_id);
+    }
+    // Clear timeout if exists
+    if (groupMatches[starter]) {
+      clearTimeout(groupMatches[starter].timeoutId);
+      delete groupMatches[starter];
+    }
     await answerCallbackQuery(callbackId);
     return;
   }
@@ -1600,7 +1622,8 @@ async function handleGroupMatch(msg: any) {
     return;
   }
   if (battles[fromId]) {
-    await sendMessage(msg.chat.id, "Siz eýýäm oýunda.");
+    // Delete the /groupmatch message
+    await deleteMessage(msg.chat.id, msg.message_id);
     return;
   }
   const groupId = String(msg.chat.id);
@@ -1608,7 +1631,15 @@ async function handleGroupMatch(msg: any) {
   const starterMention = await getMention(starter);
   const text = `Bu söweş ${starterMention} bilen`;
   const keyboard = { inline_keyboard: [[{ text: "Söweşe goşul", callback_data: `join_groupmatch:${starter}:${groupId}` }]] };
-  await sendMessage(groupId, text, { reply_markup: keyboard, parse_mode: "Markdown" });
+  const joinMsgId = await sendMessage(groupId, text, { reply_markup: keyboard, parse_mode: "Markdown" });
+  if (!joinMsgId) return;
+  const timeoutId = setTimeout(async () => {
+    if (!battles[starter] && groupMatches[starter]) {
+      await deleteMessage(groupMatches[starter].groupId, groupMatches[starter].msgId);
+      delete groupMatches[starter];
+    }
+  }, 60 * 1000) as unknown as number;
+  groupMatches[starter] = {msgId: joinMsgId, groupId, timeoutId};
 }
 
 // -------------------- Server / Webhook --------------------
