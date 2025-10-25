@@ -388,7 +388,7 @@ function checkWin(board: string[]) {
   return null;
 }
 
-function makeInlineKeyboard(board: string[], disabled = false) {
+function makeInlineKeyboard(board: string[], disabled = false, round: number = 0) {
   const keyboard: any[] = [];
   for (let r = 0; r < 3; r++) {
     const row: any[] = [];
@@ -396,7 +396,7 @@ function makeInlineKeyboard(board: string[], disabled = false) {
       const i = r * 3 + c;
       const cell = board[i];
       let text = cell === "X" ? "❌" : cell === "O" ? "⭕" : `${i + 1}`;
-      const callback_data = disabled || cell !== "" ? "noop" : `move:${i}`;
+      const callback_data = disabled || cell !== "" ? "noop" : `move:${round}:${i}`;
       row.push({ text, callback_data });
     }
     keyboard.push(row);
@@ -570,14 +570,8 @@ async function sendRoundStart(battle: any) {
       `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}\n` +
       `🎲 Hereket: ${turnMention}\n` +
       boardToText(battle.board);
-    const msgId = battle.messageIds['group'];
-    const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
-    if (msgId) {
-      await editMessageText(battle.groupChatId, msgId, text, options);
-    } else {
-      const newMsgId = await sendMessage(battle.groupChatId, text, options);
-      if (newMsgId) battle.messageIds['group'] = newMsgId;
-    }
+    const newMsgId = await sendMessage(battle.groupChatId, text, { reply_markup: makeInlineKeyboard(battle.board, false, battle.round), parse_mode: "Markdown" });
+    if (newMsgId) battle.messageIds['group'] = newMsgId;
   } else {
     for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
       const header = headerForPlayer(battle, player);
@@ -588,14 +582,8 @@ async function sendRoundStart(battle: any) {
         `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n` +
         `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}\n` +
         boardToText(battle.board);
-      const msgId = battle.messageIds[player];
-      const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
-      if (msgId) {
-        await editMessageText(player, msgId, text, options);
-      } else {
-        const newMsgId = await sendMessage(player, text, options);
-        if (newMsgId) battle.messageIds[player] = newMsgId;
-      }
+      const newMsgId = await sendMessage(player, text, { reply_markup: makeInlineKeyboard(battle.board, false, battle.round), parse_mode: "Markdown" });
+      if (newMsgId) battle.messageIds[player] = newMsgId;
     }
   }
 
@@ -812,7 +800,7 @@ async function makeBossMove(battle: any) {
     `🎲 Hereket: *Seniň hereketiň*\n` +
     boardToText(battle.board);
   const msgId = battle.messageIds[user];
-  const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+  const options = { reply_markup: makeInlineKeyboard(battle.board, false, battle.round), parse_mode: "Markdown" };
   if (msgId) await editMessageText(user, msgId, text, options);
   else await sendMessage(user, text, options);
 }
@@ -926,7 +914,25 @@ async function handleCallback(cb: any) {
     return;
   }
 
-  const idx = parseInt(data.split(":")[1]);
+  const parts = data.split(":");
+  let idx: number;
+  let cbRound: number | undefined;
+  if (parts.length === 2) {
+    // Old format move:i
+    idx = parseInt(parts[1]);
+  } else if (parts.length === 3) {
+    // New format move:round:i
+    cbRound = parseInt(parts[1]);
+    idx = parseInt(parts[2]);
+    if (cbRound !== battle.round) {
+      await answerCallbackQuery(callbackId, "Bu köne tur. Täze habary ulanyň.", true);
+      return;
+    }
+  } else {
+    await answerCallbackQuery(callbackId, "Nädogry hereket.", true);
+    return;
+  }
+
   if (isNaN(idx) || idx < 0 || idx > 8) {
     await answerCallbackQuery(callbackId, "Nädogry hereket.", true);
     return;
@@ -1033,7 +1039,7 @@ async function handleCallback(cb: any) {
       `🎲 Hereket: ${turnMention}\n` +
       boardToText(battle.board);
     const msgId = battle.messageIds['group'];
-    const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+    const options = { reply_markup: makeInlineKeyboard(battle.board, false, battle.round), parse_mode: "Markdown" };
     if (msgId) await editMessageText(battle.groupChatId, msgId, text, options);
     else await sendMessage(battle.groupChatId, text, options);
   } else {
@@ -1047,7 +1053,7 @@ async function handleCallback(cb: any) {
         `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}\n` +
         boardToText(battle.board);
       const msgId = battle.messageIds[player];
-      const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+      const options = { reply_markup: makeInlineKeyboard(battle.board, false, battle.round), parse_mode: "Markdown" };
       if (msgId) await editMessageText(player, msgId, text, options);
       else await sendMessage(player, text, options);
     }
