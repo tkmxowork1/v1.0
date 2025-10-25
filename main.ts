@@ -9,9 +9,7 @@
 // New: Referral system - 0.05 TMT per new referral who starts the bot first time
 //
 // Notes: Requires BOT_TOKEN env var and Deno KV. Deploy as webhook at SECRET_PATH.
-
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-
 const TOKEN = Deno.env.get("BOT_TOKEN")!;
 if (!TOKEN) throw new Error("BOT_TOKEN env var is required");
 const API = `https://api.telegram.org/bot${TOKEN}`;
@@ -19,25 +17,20 @@ const SECRET_PATH = "/tkmxo"; // make sure webhook path matches
 const CHANNEL = "@TkmXO";
 const CHAT_CHANNEL = "@TkmXOChat";
 const BOT_USERNAME = "TkmXOBot"; // Adjust to your bot's username
-
 // Deno KV
 const kv = await Deno.openKv();
-
 const ADMIN_USERNAME = "Masakoff"; // without @
-
 // runtime storages
 let queue: string[] = [];
 let trophyQueue: string[] = [];
 const battles: Record<string, any> = {};
 const searchTimeouts: Record<string, number> = {};
 const groupMatches: Record<string, {msgId: number, groupId: string, timeoutId: number}> = {};
-
 // State helpers using KV
 async function getWithdrawalState(userId: string): Promise<{ amount: number; step: "amount" | "phone" } | null> {
   const res = await kv.get<{ amount: number; step: "amount" | "phone" }>(["states", "withdrawal", userId]);
   return res.value;
 }
-
 async function setWithdrawalState(userId: string, state: { amount: number; step: "amount" | "phone" } | null) {
   if (state) {
     await kv.set(["states", "withdrawal", userId], state);
@@ -45,12 +38,10 @@ async function setWithdrawalState(userId: string, state: { amount: number; step:
     await kv.delete(["states", "withdrawal", userId]);
   }
 }
-
 async function getPromocodeState(userId: string): Promise<boolean> {
   const res = await kv.get<boolean>(["states", "promocode", userId]);
   return res.value ?? false;
 }
-
 async function setPromocodeState(userId: string, active: boolean) {
   if (active) {
     await kv.set(["states", "promocode", userId], true);
@@ -58,12 +49,10 @@ async function setPromocodeState(userId: string, active: boolean) {
     await kv.delete(["states", "promocode", userId]);
   }
 }
-
 async function getBossState(userId: string): Promise<boolean> {
   const res = await kv.get<boolean>(["states", "boss", userId]);
   return res.value ?? false;
 }
-
 async function setBossState(userId: string, active: boolean) {
   if (active) {
     await kv.set(["states", "boss", userId], true);
@@ -71,12 +60,10 @@ async function setBossState(userId: string, active: boolean) {
     await kv.delete(["states", "boss", userId]);
   }
 }
-
 async function getCreateBossState(userId: string): Promise<boolean> {
   const res = await kv.get<boolean>(["states", "createboss", userId]);
   return res.value ?? false;
 }
-
 async function setCreateBossState(userId: string, active: boolean) {
   if (active) {
     await kv.set(["states", "createboss", userId], true);
@@ -84,12 +71,10 @@ async function setCreateBossState(userId: string, active: boolean) {
     await kv.delete(["states", "createboss", userId]);
   }
 }
-
 async function getGlobalMessageState(userId: string): Promise<boolean> {
   const res = await kv.get<boolean>(["states", "globalmessage", userId]);
   return res.value ?? false;
 }
-
 async function setGlobalMessageState(userId: string, active: boolean) {
   if (active) {
     await kv.set(["states", "globalmessage", userId], true);
@@ -97,7 +82,6 @@ async function setGlobalMessageState(userId: string, active: boolean) {
     await kv.delete(["states", "globalmessage", userId]);
   }
 }
-
 // -------------------- Telegram helpers --------------------
 async function sendMessage(chatId: string | number, text: string, options: any = {}): Promise<number | null> {
   try {
@@ -114,7 +98,6 @@ async function sendMessage(chatId: string | number, text: string, options: any =
     return null;
   }
 }
-
 async function sendPhoto(chatId: string | number, photo: string, options: any = {}) {
   try {
     const body: any = { chat_id: chatId, photo, ...options };
@@ -127,7 +110,6 @@ async function sendPhoto(chatId: string | number, photo: string, options: any = 
     console.error("sendPhoto error", e);
   }
 }
-
 async function editMessageText(chatId: string | number, messageId: number, text: string, options: any = {}) {
   try {
     const body = { chat_id: chatId, message_id: messageId, text, ...options };
@@ -140,7 +122,6 @@ async function editMessageText(chatId: string | number, messageId: number, text:
     console.warn("editMessageText failed", e?.message ?? e);
   }
 }
-
 async function deleteMessage(chatId: string | number, messageId: number) {
   try {
     await fetch(`${API}/deleteMessage`, {
@@ -152,7 +133,6 @@ async function deleteMessage(chatId: string | number, messageId: number) {
     console.warn("deleteMessage failed", e);
   }
 }
-
 async function answerCallbackQuery(id: string, text = "", showAlert = false) {
   try {
     await fetch(`${API}/answerCallbackQuery`, {
@@ -162,6 +142,20 @@ async function answerCallbackQuery(id: string, text = "", showAlert = false) {
     });
   } catch (e) {
     console.warn("answerCallbackQuery failed", e?.message ?? e);
+  }
+}
+
+// Added function to edit inline keyboard only
+async function editMessageReplyMarkup(chatId: string | number, messageId: number, replyMarkup: any) {
+  try {
+    const body = { chat_id: chatId, message_id: messageId, reply_markup: replyMarkup };
+    await fetch(`${API}/editMessageReplyMarkup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.warn("editMessageReplyMarkup failed", e?.message ?? e);
   }
 }
 
@@ -182,7 +176,6 @@ async function isSubscribed(userId: string): Promise<boolean> {
   }
   return true;
 }
-
 // -------------------- Profile helpers --------------------
 type Profile = {
   id: string;
@@ -197,19 +190,16 @@ type Profile = {
   lastActive: number;
   referrals: number;
 };
-
 function getDisplayName(p: Profile) {
   if (p.username) return p.username;
   return p.displayName && p.displayName !== "" ? p.displayName : `ID:${p.id}`;
 }
-
 async function getMention(userId: string): Promise<string> {
   const p = await getProfile(userId);
   if (!p) return `ID:${userId}`;
   const name = getDisplayName(p);
   return `[${name}](tg://user?id=${p.id})`;
 }
-
 async function initProfile(userId: string, username?: string, displayName?: string): Promise<{ profile: Profile; isNew: boolean }> {
   const key = ["profiles", userId];
   const res = await kv.get(key);
@@ -245,12 +235,10 @@ async function initProfile(userId: string, username?: string, displayName?: stri
     return { profile: existing, isNew: false };
   }
 }
-
 async function getProfile(userId: string): Promise<Profile | null> {
   const res = await kv.get(["profiles", userId]);
   return (res.value as Profile) ?? null;
 }
-
 async function updateProfile(userId: string, delta: Partial<Profile>) {
   const existing = (await getProfile(userId)) || (await initProfile(userId)).profile;
   const newProfile: Profile = {
@@ -270,7 +258,6 @@ async function updateProfile(userId: string, delta: Partial<Profile>) {
   await kv.set(["profiles", userId], newProfile);
   return newProfile;
 }
-
 function getRank(trophies: number) {
   if (trophies < 500) return "🌱 Täze";
   if (trophies < 1000) return "🥉 Bronza";
@@ -279,25 +266,32 @@ function getRank(trophies: number) {
   if (trophies < 2500) return "🏆 Platin";
   return "💎 Brilliant";
 }
-
 async function sendProfile(chatId: string) {
   const p = (await getProfile(chatId))!;
   const winRate = p.gamesPlayed ? ((p.wins / p.gamesPlayed) * 100).toFixed(1) : "0";
   const referralLink = `https://t.me/${BOT_USERNAME}?start=${p.id}`;
   const msg =
-    `🏅 *Profil: ${getDisplayName(p)}*\n\n` +
-    `🆔 ID: \`${p.id}\`\n\n` +
-    `🏆 Kuboklar: *${p.trophies}*\n` +
-    `💰 TMT Balans: *${p.tmt}*\n` +
-    `🏅 Dereje: *${getRank(p.trophies)}*\n` +
-    `🎲 Oýnalan oýunlar: *${p.gamesPlayed}*\n` +
-    `✅ Ýeňişler: *${p.wins}* | ❌ Utulyşlar: *${p.losses}* | 🤝 Deňlikler: *${p.draws}*\n` +
-    `📈 Ýeňiş göterimi: *${winRate}%*\n` +
-    `👥 Referallar: *${p.referrals}*\n\n` +
+    `🏅 *Profil: ${getDisplayName(p)}*
+` +
+    `🆔 ID: \`${p.id}\`
+` +
+    `🏆 Kuboklar: *${p.trophies}*
+` +
+    `💰 TMT Balans: *${p.tmt}*
+` +
+    `🏅 Dereje: *${getRank(p.trophies)}*
+` +
+    `🎲 Oýnalan oýunlar: *${p.gamesPlayed}*
+` +
+    `✅ Ýeňişler: *${p.wins}* | ❌ Utulyşlar: *${p.losses}* | 🤝 Deňlikler: *${p.draws}*
+` +
+    `📈 Ýeňiş göterimi: *${winRate}%*
+` +
+    `👥 Referallar: *${p.referrals}*
+` +
     `🔗 Referral link: \`${referralLink}\``;
   await sendMessage(chatId, msg, { parse_mode: "Markdown" });
 }
-
 async function sendUserProfile(adminChatId: string, userId: string) {
   const p = await getProfile(userId);
   if (!p) {
@@ -307,19 +301,27 @@ async function sendUserProfile(adminChatId: string, userId: string) {
   const winRate = p.gamesPlayed ? ((p.wins / p.gamesPlayed) * 100).toFixed(1) : "0";
   const referralLink = `https://t.me/${BOT_USERNAME}?start=${p.id}`;
   const msg =
-    `🏅 *Profil: ${getDisplayName(p)}*\n\n` +
-    `🆔 ID: \`${p.id}\`\n\n` +
-    `🏆 Kuboklar: *${p.trophies}*\n` +
-    `💰 TMT Balans: *${p.tmt}*\n` +
-    `🏅 Dereje: *${getRank(p.trophies)}*\n` +
-    `🎲 Oýnalan oýunlar: *${p.gamesPlayed}*\n` +
-    `✅ Ýeňişler: *${p.wins}* | ❌ Utulyşlar: *${p.losses}* | 🤝 Deňlikler: *${p.draws}*\n` +
-    `📈 Ýeňiş göterimi: *${winRate}%*\n` +
-    `👥 Referallar: *${p.referrals}*\n\n` +
+    `🏅 *Profil: ${getDisplayName(p)}*
+` +
+    `🆔 ID: \`${p.id}\`
+` +
+    `🏆 Kuboklar: *${p.trophies}*
+` +
+    `💰 TMT Balans: *${p.tmt}*
+` +
+    `🏅 Dereje: *${getRank(p.trophies)}*
+` +
+    `🎲 Oýnalan oýunlar: *${p.gamesPlayed}*
+` +
+    `✅ Ýeňişler: *${p.wins}* | ❌ Utulyşlar: *${p.losses}* | 🤝 Deňlikler: *${p.draws}*
+` +
+    `📈 Ýeňiş göterimi: *${winRate}%*
+` +
+    `👥 Referallar: *${p.referrals}*
+` +
     `🔗 Referral link: \`${referralLink}\``;
   await sendMessage(adminChatId, msg, { parse_mode: "Markdown" });
 }
-
 // -------------------- Leaderboard helpers --------------------
 async function getLeaderboard(top = 10, offset = 0): Promise<{top: Profile[], total: number}> {
   const players: Profile[] = [];
@@ -338,41 +340,38 @@ async function getLeaderboard(top = 10, offset = 0): Promise<{top: Profile[], to
   const filtered = players.filter(p => !p.id.startsWith("boss_"));
   return {top: filtered.slice(offset, offset + top), total: filtered.length};
 }
-
 async function sendLeaderboard(chatId: string) {
   const {top: topPlayers} = await getLeaderboard(10, 0);
-
   if (topPlayers.length === 0) {
     await sendMessage(chatId, "Entäk oýunçy ýok! Liderler tablosyna çykmak üçin oýna başlaň!");
     return;
   }
-
-  let msg = `🏆 *Liderler*\n\n`;
+  let msg = `🏆 *Liderler*
+`;
   topPlayers.forEach((p, i) => {
     const rankNum = i + 1;
     const name = getDisplayName(p);
     const link = p.username ? `https://t.me/${p.username}` : `tg://user?id=${p.id}`;
     const winRate = p.gamesPlayed ? ((p.wins / p.gamesPlayed) * 100).toFixed(1) : "0";
-    msg += `*${rankNum}.* [${name}](${link}) — 🏆 *${p.trophies}* | 📈 *${winRate}%*\n`;
+    msg += `*${rankNum}.* [${name}](${link}) — 🏆 *${p.trophies}* | 📈 *${winRate}%*
+`;
   });
-
   await sendMessage(chatId, msg, { parse_mode: "Markdown" });
 }
-
 // -------------------- Game logic --------------------
 function createEmptyBoard(): string[] {
   return Array(9).fill("");
 }
-
 function boardToText(board: string[]) {
   const map: any = { "": "▫️", X: "❌", O: "⭕" };
-  let text = "\n";
+  let text = "
+";
   for (let i = 0; i < 9; i += 3) {
-    text += `${map[board[i]]}${map[board[i + 1]]}${map[board[i + 2]]}\n`;
+    text += `${map[board[i]]}${map[board[i + 1]]}${map[board[i + 2]]}
+`;
   }
   return text;
 }
-
 function checkWin(board: string[]) {
   const lines = [
     [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -387,7 +386,6 @@ function checkWin(board: string[]) {
   if (board.every((c) => c !== "")) return { winner: "draw" };
   return null;
 }
-
 function makeInlineKeyboard(board: string[], disabled = false) {
   const keyboard: any[] = [];
   for (let r = 0; r < 3; r++) {
@@ -404,25 +402,20 @@ function makeInlineKeyboard(board: string[], disabled = false) {
   keyboard.push([{ text: "🏳️ Tabşyrmak", callback_data: "surrender" }]);
   return { inline_keyboard: keyboard };
 }
-
 // -------------------- AI for Boss (Minimax) --------------------
 function minimax(newBoard: string[], player: string, aiMark: string, humanMark: string): { score: number; index?: number } {
   const availSpots = newBoard.map((val, idx) => val === "" ? idx : null).filter(v => v !== null) as number[];
-
   const result = checkWin(newBoard);
   if (result?.winner === aiMark) return { score: 10 };
   if (result?.winner === humanMark) return { score: -10 };
   if (result?.winner === "draw") return { score: 0 };
-
   const moves: { index: number; score: number }[] = [];
-
   for (const index of availSpots) {
     newBoard[index] = player;
     const score = minimax(newBoard, player === aiMark ? humanMark : aiMark, aiMark, humanMark).score;
     moves.push({ index, score });
     newBoard[index] = "";
   }
-
   let bestMove;
   if (player === aiMark) {
     let bestScore = -Infinity;
@@ -443,12 +436,10 @@ function minimax(newBoard: string[], player: string, aiMark: string, humanMark: 
   }
   return bestMove ?? { score: 0 };
 }
-
 function computerMove(board: string[], aiMark: string, humanMark: string): number {
   const result = minimax([...board], aiMark, aiMark, humanMark);
   return result.index ?? -1;
 }
-
 // -------------------- Battle control --------------------
 async function startBattle(p1: string, p2: string, isTrophyBattle: boolean = false, rounds: number = 3, isGroup: boolean = false, groupChatId?: string) {
   if (searchTimeouts[p1]) {
@@ -459,7 +450,6 @@ async function startBattle(p1: string, p2: string, isTrophyBattle: boolean = fal
     clearTimeout(searchTimeouts[p2]);
     delete searchTimeouts[p2];
   }
-
   const battle = {
     players: [p1, p2],
     board: createEmptyBoard(),
@@ -473,29 +463,30 @@ async function startBattle(p1: string, p2: string, isTrophyBattle: boolean = fal
     isTrophyBattle: isTrophyBattle,
     isBoss: false,
     isGroup: isGroup,
-    groupChatId: isGroup ? groupChatId : undefined,
+    groupChatId: isGroup ? groupChatId : undefined, // Ensure groupChatId is stored correctly
     rounds,
   };
   battles[p1] = battle;
   battles[p2] = battle;
-
   await initProfile(p1);
   await initProfile(p2);
-
   if (isGroup && groupChatId) {
     const p1Mention = await getMention(p1);
     const p2Mention = await getMention(p2);
     await sendMessage(groupChatId, `${p1Mention} we ${p2Mention} arasynda söweş başlady!`, { parse_mode: "Markdown" });
   } else {
     const battleTypeText = isTrophyBattle ? "🏆 *TMT üçin söweş*" : "⚔️ *Kubok üçin söweş*";
-    const stakeText = isTrophyBattle ? "\n\nGoýumlar: Iki oýunçy hem 1 TMT goýýar. Ýeňiji +0.75 TMT alýar." : "";
-
-    await sendMessage(p1, `${battleTypeText}\n\nSen ❌ (X).${stakeText}\n\n*Oýun tertibi:* ${rounds} turdan ybarat vs ID:${p2}`, { parse_mode: "Markdown" });
-    await sendMessage(p2, `${battleTypeText}\n\nSen ⭕ (O).${stakeText}\n\n*Oýun tertibi:* ${rounds} turdan ybarat vs ID:${p1}`, { parse_mode: "Markdown" });
+    const stakeText = isTrophyBattle ? "
+Goýumlar: Iki oýunçy hem 1 TMT goýýar. Ýeňiji +0.75 TMT alýar." : "";
+    await sendMessage(p1, `${battleTypeText}
+Sen ❌ (X).${stakeText}
+*Oýun tertibi:* ${rounds} turdan ybarat vs ID:${p2}`, { parse_mode: "Markdown" });
+    await sendMessage(p2, `${battleTypeText}
+Sen ⭕ (O).${stakeText}
+*Oýun tertibi:* ${rounds} turdan ybarat vs ID:${p1}`, { parse_mode: "Markdown" });
   }
   await sendRoundStart(battle);
 }
-
 async function startBossBattle(user: string, bossName: string, boss: any) {
   const bossId = `boss_${bossName}`;
   const battle = {
@@ -517,12 +508,12 @@ async function startBossBattle(user: string, bossName: string, boss: any) {
   };
   battles[user] = battle;
   battles[bossId] = battle;
-
-  await sendPhoto(user, boss.photoId, { caption: `Boss: ${bossName}\nTur sanaw: ${boss.rounds}\nBaha: ${boss.reward} TMT (ýeňişde)` });
+  await sendPhoto(user, boss.photoId, { caption: `Boss: ${bossName}
+Tur sanaw: ${boss.rounds}
+Baha: ${boss.reward} TMT (ýeňişde)` });
   await sendMessage(user, "Boss bilen söweş başlaýar! Sen ❌ (X).", { parse_mode: "Markdown" });
   await sendRoundStart(battle);
 }
-
 function headerForPlayer(battle: any, player: string) {
   const opponent = battle.players.find((p: string) => p !== player)!;
   const yourMark = battle.marks[player];
@@ -531,11 +522,9 @@ function headerForPlayer(battle: any, player: string) {
   const opponentDisplay = battle.isBoss ? battle.bossName : `ID:${opponent}`;
   return `${battleTypeText} — Sen (${yourMark}) vs ${opponentDisplay} (${opponentMark})`;
 }
-
 async function endTurnIdle(battle: any) {
   const loser = battle.turn;
   const winner = battle.players.find((p: string) => p !== loser)!;
-
   if (battle.isGroup) {
     const loserMention = await getMention(loser);
     const winnerMention = await getMention(winner);
@@ -544,7 +533,6 @@ async function endTurnIdle(battle: any) {
     await sendMessage(loser, "⚠️ Hereketde gijä galdyňyz. Siz tabşyrdyňyz.");
     if (!battle.isBoss) await sendMessage(winner, "⚠️ Garşydaş gijä galdy. Siz ýeňdiňiz!");
   }
-
   if (battle.idleTimerId) {
     clearTimeout(battle.idleTimerId);
     delete battle.idleTimerId;
@@ -553,10 +541,8 @@ async function endTurnIdle(battle: any) {
     clearTimeout(battle.moveTimerId);
     delete battle.moveTimerId;
   }
-
   await finishMatch(battle, { winner: winner, loser: loser });
 }
-
 async function sendRoundStart(battle: any) {
   if (battle.isGroup && battle.groupChatId) {
     const p1 = battle.players[0];
@@ -565,28 +551,38 @@ async function sendRoundStart(battle: any) {
     const marksText = `${await getMention(p1)} (${battle.marks[p1]}) vs ${await getMention(p2)} (${battle.marks[p2]})`;
     const turnMention = await getMention(battle.turn);
     const text =
-      `${header} — ${marksText}\n\n` +
-      `*Tur ${battle.round}/${battle.rounds}*\n` +
-      `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}\n` +
-      `🎲 Hereket: ${turnMention}\n` +
+      `${header} — ${marksText}
+` +
+      `*Tur ${battle.round}/${battle.rounds}*
+` +
+      `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}
+` +
+      `🎲 Hereket: ${turnMention}
+` +
       boardToText(battle.board);
     const msgId = battle.messageIds['group'];
     const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
     if (msgId) {
+      // Use editMessageText to update text and inline keyboard
       await editMessageText(battle.groupChatId, msgId, text, options);
     } else {
+      // Send new message and store its ID in the battle object
       const newMsgId = await sendMessage(battle.groupChatId, text, options);
-      if (newMsgId) battle.messageIds['group'] = newMsgId;
+      if (newMsgId) battle.messageIds['group'] = newMsgId; // Store the group message ID
     }
   } else {
     for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
       const header = headerForPlayer(battle, player);
       const yourTurn = battle.turn === player;
       const text =
-        `${header}\n\n` +
-        `*Tur ${battle.round}/${battle.rounds}*\n` +
-        `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n` +
-        `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}\n` +
+        `${header}
+` +
+        `*Tur ${battle.round}/${battle.rounds}*
+` +
+        `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}
+` +
+        `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}
+` +
         boardToText(battle.board);
       const msgId = battle.messageIds[player];
       const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
@@ -598,22 +594,18 @@ async function sendRoundStart(battle: any) {
       }
     }
   }
-
   if (battle.idleTimerId) {
     clearTimeout(battle.idleTimerId);
   }
   battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 3 * 60 * 1000); // Reduced to 3 minutes
-
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
   }
   battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
-
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
   }
 }
-
 async function endBattleIdle(battle: any) {
   const [p1, p2] = battle.players;
   if (battle.isGroup) {
@@ -622,18 +614,15 @@ async function endBattleIdle(battle: any) {
     await sendMessage(p1, "⚠️ Oýun hereketsizlik sebäpli ýatyryldy (3 minut).");
     if (!p2.startsWith("boss_")) await sendMessage(p2, "⚠️ Oýun hereketsizlik sebäpli ýatyryldy (3 minut).");
   }
-
   if (battle.isTrophyBattle) {
     await updateProfile(p1, { tmt: 1 });
     if (!p2.startsWith("boss_")) await updateProfile(p2, { tmt: 1 });
     await sendMessage(p1, "💸 Hereketsizlik üçin 1 TMT yzyna gaýtaryldy.");
     if (!p2.startsWith("boss_")) await sendMessage(p2, "💸 Hereketsizlik üçin 1 TMT yzyna gaýtaryldy.");
   }
-
   delete battles[p1];
   delete battles[p2];
 }
-
 async function finishMatch(battle: any, result: { winner?: string; loser?: string; draw?: boolean }) {
   try {
     if (battle.idleTimerId) {
@@ -645,21 +634,26 @@ async function finishMatch(battle: any, result: { winner?: string; loser?: strin
       delete battle.moveTimerId;
     }
     const [p1, p2] = battle.players;
-
     if (battle.isGroup && battle.groupChatId) {
       const msgId = battle.messageIds['group'];
       const header = `⚔️ Group söweşi — ${await getMention(p1)} (${battle.marks[p1]}) vs ${await getMention(p2)} (${battle.marks[p2]})`;
       let text: string;
       if (result.draw) {
-        text = `${header}\n\n*Oýun Netijesi:* 🤝 *Deňlik!*\n${boardToText(battle.board)}`;
+        text = `${header}
+*Oýun Netijesi:* 🤝 *Deňlik!*
+${boardToText(battle.board)}`;
       } else {
         const winnerMention = await getMention(result.winner!);
-        text = `${header}\n\n*Oýun Netijesi:* 🎉 *${winnerMention} ýeňdi!*\n${boardToText(battle.board)}`;
+        text = `${header}
+*Oýun Netijesi:* 🎉 *${winnerMention} ýeňdi!*
+${boardToText(battle.board)}`;
       }
       if (msgId) {
+        // Use editMessageText to update text and disable keyboard
         await editMessageText(battle.groupChatId, msgId, text, { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" });
       } else {
-        await sendMessage(battle.groupChatId, text, { parse_mode: "Markdown" });
+         // Fallback if msgId was lost, send new message
+         await sendMessage(battle.groupChatId, text, { parse_mode: "Markdown" });
       }
     } else {
       for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
@@ -667,11 +661,17 @@ async function finishMatch(battle: any, result: { winner?: string; loser?: strin
         const header = headerForPlayer(battle, player);
         let text: string;
         if (result.draw) {
-          text = `${header}\n\n*Oýun Netijesi:* 🤝 *Deňlik!*\n${boardToText(battle.board)}`;
+          text = `${header}
+*Oýun Netijesi:* 🤝 *Deňlik!*
+${boardToText(battle.board)}`;
         } else if (result.winner === player) {
-          text = `${header}\n\n*Oýun Netijesi:* 🎉 *Siz ýeňdiňiz!*\n${boardToText(battle.board)}`;
+          text = `${header}
+*Oýun Netijesi:* 🎉 *Siz ýeňdiňiz!*
+${boardToText(battle.board)}`;
         } else {
-          text = `${header}\n\n*Oýun Netijesi:* 😢 *Siz utuldyňyz.*\n${boardToText(battle.board)}`;
+          text = `${header}
+*Oýun Netijesi:* 😢 *Siz utuldyňyz.*
+${boardToText(battle.board)}`;
         }
         if (msgId) {
           await editMessageText(player, msgId, text, { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" });
@@ -680,7 +680,6 @@ async function finishMatch(battle: any, result: { winner?: string; loser?: strin
         }
       }
     }
-
     if (result.draw) {
       await updateProfile(p1, { gamesPlayed: 1, draws: 1 });
       if (!p2.startsWith("boss_")) await updateProfile(p2, { gamesPlayed: 1, draws: 1 });
@@ -690,7 +689,6 @@ async function finishMatch(battle: any, result: { winner?: string; loser?: strin
         await sendMessage(p1, "🤝 Oýun deňlik boldy!");
         if (!p2.startsWith("boss_")) await sendMessage(p2, "🤝 Oýun deňlik boldy!");
       }
-
       if (battle.isTrophyBattle) {
         await updateProfile(p1, { tmt: 1 });
         await updateProfile(p2, { tmt: 1 });
@@ -705,18 +703,19 @@ async function finishMatch(battle: any, result: { winner?: string; loser?: strin
       const loser = result.loser!;
       await initProfile(winner);
       if (!loser.startsWith("boss_")) await initProfile(loser);
-
       await updateProfile(winner, { gamesPlayed: 1, wins: 1, trophies: battle.isBoss || battle.isGroup ? 0 : 1 });
       if (!loser.startsWith("boss_")) await updateProfile(loser, { gamesPlayed: 1, losses: 1, trophies: battle.isBoss || battle.isGroup ? 0 : -1 });
       if (battle.isGroup) {
         const winnerMention = await getMention(winner);
         const loserMention = await getMention(loser);
-        await sendMessage(battle.groupChatId, `🎉 ${winnerMention} ýeňdi!\nvs ${loserMention}`, { parse_mode: "Markdown" });
+        await sendMessage(battle.groupChatId, `🎉 ${winnerMention} ýeňdi!
+vs ${loserMention}`, { parse_mode: "Markdown" });
       } else {
-        await sendMessage(winner, `🎉 Siz ýeňdiňiz!\n🏆 *+1 kubok* (vs ${battle.isBoss ? battle.bossName : `ID:${loser}`})`, { parse_mode: "Markdown" });
-        if (!loser.startsWith("boss_")) await sendMessage(loser, `😢 Siz utuldyňyz.\n🏆 *-1 kubok* (vs ID:${winner})`, { parse_mode: "Markdown" });
+        await sendMessage(winner, `🎉 Siz ýeňdiňiz!
+🏆 *+1 kubok* (vs ${battle.isBoss ? battle.bossName : `ID:${loser}`})`, { parse_mode: "Markdown" });
+        if (!loser.startsWith("boss_")) await sendMessage(loser, `😢 Siz utuldyňyz.
+🏆 *-1 kubok* (vs ID:${winner})`, { parse_mode: "Markdown" });
       }
-
       if (battle.isTrophyBattle) {
         await updateProfile(winner, { tmt: 1.75 });
         await sendMessage(winner, "🏆 TMT söweşde ýeňeniňiz üçin +0.75 TMT!");
@@ -729,14 +728,12 @@ async function finishMatch(battle: any, result: { winner?: string; loser?: strin
         await sendMessage(p1, "Bossdan utuldyň...");
       }
     }
-
     delete battles[p1];
     delete battles[p2];
   } catch (err) {
     console.error("finishMatch error:", err);
   }
 }
-
 // -------------------- Boss move handler --------------------
 async function makeBossMove(battle: any) {
   const boss = battle.players.find((p: string) => p.startsWith("boss_"))!;
@@ -745,9 +742,7 @@ async function makeBossMove(battle: any) {
   const humanMark = battle.marks[user];
   const idx = computerMove(battle.board, mark, humanMark);
   if (idx === -1) return; // no move
-
   battle.board[idx] = mark;
-
   const winResult = checkWin(battle.board);
   let roundWinner: string | undefined;
   if (winResult) {
@@ -756,24 +751,28 @@ async function makeBossMove(battle: any) {
       roundWinner = battle.players.find((p: string) => battle.marks[p] === winner)!;
       battle.roundWins[roundWinner] = (battle.roundWins[roundWinner] || 0) + 1;
     }
-
     let boardText = boardToText(battle.board);
     if (line) {
-      boardText += `\n🎉 *Çyzyk:* ${line.map((i: number) => i + 1).join("-")}`;
+      boardText += `
+🎉 *Çyzyk:* ${line.map((i: number) => i + 1).join("-")}`;
     } else if (winner === "draw") {
-      boardText += `\n🤝 *Deňlik!*`;
+      boardText += `
+🤝 *Deňlik!*`;
     }
-
     const msgId = battle.messageIds[user];
     const header = headerForPlayer(battle, user);
-    let text = `${header}\n\n*Tur ${battle.round} Netijesi!*\n`;
-    if (winner === "draw") text += `🤝 Deňlik boldy!\n`;
-    else text += `${roundWinner === user ? "🎉 Siz turda ýeňdiňiz!" : "😢 Siz turda utuldyňyz"}\n`;
-    text += `📊 Hesap: ${battle.roundWins[user]} - ${battle.roundWins[boss]}\n${boardText}`;
+    let text = `${header}
+*Tur ${battle.round} Netijesi!*
+`;
+    if (winner === "draw") text += `🤝 Deňlik boldy!
+`;
+    else text += `${roundWinner === user ? "🎉 Siz turda ýeňdiňiz!" : "😢 Siz turda utuldyňyz"}
+`;
+    text += `📊 Hesap: ${battle.roundWins[user]} - ${battle.roundWins[boss]}
+${boardText}`;
     const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
     if (msgId) await editMessageText(user, msgId, text, options);
     else await sendMessage(user, text, options);
-
     // Check if match over
     const neededWins = Math.ceil(battle.rounds / 2);
     if (battle.roundWins[user] >= neededWins || battle.roundWins[boss] >= neededWins || battle.round === battle.rounds) {
@@ -786,37 +785,35 @@ async function makeBossMove(battle: any) {
       }
       return;
     }
-
     // Delay before next round
     await new Promise(resolve => setTimeout(resolve, 2000));
-
     // Next round
     battle.round++;
     battle.board = createEmptyBoard();
     battle.turn = battle.players[(battle.round - 1) % 2];
-
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
     battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
-
     await sendRoundStart(battle);
     return;
   }
-
   // Update board for user
   battle.turn = user;
   const header = headerForPlayer(battle, user);
   const text =
-    `${header}\n\n` +
-    `*Tur: ${battle.round}/${battle.rounds}*\n` +
-    `📊 Hesap: ${battle.roundWins[user]} - ${battle.roundWins[boss]}\n` +
-    `🎲 Hereket: *Seniň hereketiň*\n` +
+    `${header}
+` +
+    `*Tur: ${battle.round}/${battle.rounds}*
+` +
+    `📊 Hesap: ${battle.roundWins[user]} - ${battle.roundWins[boss]}
+` +
+    `🎲 Hereket: *Seniň hereketiň*
+` +
     boardToText(battle.board);
   const msgId = battle.messageIds[user];
   const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
   if (msgId) await editMessageText(user, msgId, text, options);
   else await sendMessage(user, text, options);
 }
-
 // -------------------- Callback handler --------------------
 async function handleCallback(cb: any) {
   const fromId = String(cb.from.id);
@@ -824,12 +821,10 @@ async function handleCallback(cb: any) {
   const callbackId = cb.id;
   const username = cb.from.username;
   const displayName = cb.from.first_name || cb.from.username || fromId;
-
   if (!data) {
     await answerCallbackQuery(callbackId);
     return;
   }
-
   if (data === "check_subscription") {
     if (await isSubscribed(fromId)) {
       await processReferral(fromId);
@@ -841,14 +836,12 @@ async function handleCallback(cb: any) {
     }
     return;
   }
-
   if (data.startsWith("menu:")) {
     const cmd = data.split(":")[1];
     await handleCommand(fromId, username, displayName, `/${cmd}`, false);
     await answerCallbackQuery(callbackId);
     return;
   }
-
   if (data.startsWith("join_groupmatch:")) {
     const [_, starter, groupId] = data.split(":");
     const joiner = fromId;
@@ -878,12 +871,10 @@ async function handleCallback(cb: any) {
     await answerCallbackQuery(callbackId);
     return;
   }
-
   if (data === "noop") {
     await answerCallbackQuery(callbackId);
     return;
   }
-
   const battle = battles[fromId];
   if (!battle) {
     if (data === "surrender") {
@@ -893,18 +884,132 @@ async function handleCallback(cb: any) {
     await answerCallbackQuery(callbackId);
     return;
   }
-
   // Reset timers
   if (battle.idleTimerId) {
     clearTimeout(battle.idleTimerId);
     battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 3 * 60 * 1000); // Reduced to 3 minutes
   }
-
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
     battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
   }
 
+  // --- Group Match Handling Logic ---
+  if (battle.isGroup && battle.groupChatId) {
+    if (data === "surrender") {
+        const opponent = battle.players.find((p: string) => p !== fromId)!;
+        const fromMention = await getMention(fromId);
+        const opponentMention = await getMention(opponent);
+        await sendMessage(battle.groupChatId, `🏳️ ${fromMention} tabşyrdy. ${opponentMention} ýeňdi!`, { parse_mode: "Markdown" });
+        await finishMatch(battle, { winner: opponent, loser: fromId });
+        await answerCallbackQuery(callbackId, "Siz tabşyrdyňyz.");
+        return;
+    }
+    if (!data.startsWith("move:")) {
+        await answerCallbackQuery(callbackId);
+        return;
+    }
+    const idx = parseInt(data.split(":")[1]);
+    if (isNaN(idx) || idx < 0 || idx > 8) {
+        await answerCallbackQuery(callbackId, "Nädogry hereket.", true);
+        return;
+    }
+    if (battle.turn !== fromId) {
+        await answerCallbackQuery(callbackId, "Seniň hereketiň däl.", true);
+        return;
+    }
+    if (battle.board[idx] !== "") {
+        await answerCallbackQuery(callbackId, "Bu ýer eýýäm eýelenen.", true);
+        return;
+    }
+    const mark = battle.marks[fromId];
+    battle.board[idx] = mark;
+    const winResult = checkWin(battle.board);
+    let roundWinner: string | undefined;
+    if (winResult) {
+        const { winner, line } = winResult as any;
+        if (winner !== "draw") {
+            roundWinner = battle.players.find((p: string) => battle.marks[p] === winner)!;
+            battle.roundWins[roundWinner] = (battle.roundWins[roundWinner] || 0) + 1;
+        }
+        let boardText = boardToText(battle.board);
+        if (line) {
+            boardText += `
+🎉 *Çyzyk:* ${line.map((i: number) => i + 1).join("-")}`;
+        } else if (winner === "draw") {
+            boardText += `
+🤝 *Deňlik!*`;
+        }
+        const msgId = battle.messageIds['group'];
+        const p1 = battle.players[0];
+        const p2 = battle.players[1];
+        const header = `⚔️ Group söweşi — ${await getMention(p1)} (${battle.marks[p1]}) vs ${await getMention(p2)} (${battle.marks[p2]})`;
+        let text = `${header}
+*Tur ${battle.round} Netijesi!*
+`;
+        if (winner === "draw") text += `🤝 Deňlik boldy!
+`;
+        else {
+            const roundWinnerMention = await getMention(roundWinner!);
+            text += `🎉 ${roundWinnerMention} turda ýeňdi!
+`;
+        }
+        text += `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}
+${boardText}`;
+        const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
+        if (msgId) await editMessageText(battle.groupChatId, msgId, text, options);
+        else await sendMessage(battle.groupChatId, text, options);
+        // Check if match over
+        const neededWins = Math.ceil(battle.rounds / 2);
+        if (battle.roundWins[p1] >= neededWins || battle.roundWins[p2] >= neededWins || battle.round === battle.rounds) {
+            if (battle.roundWins[p1] > battle.roundWins[p2]) {
+                await finishMatch(battle, { winner: p1, loser: p2 });
+            } else if (battle.roundWins[p2] > battle.roundWins[p1]) {
+                await finishMatch(battle, { winner: p2, loser: p1 });
+            } else {
+                await finishMatch(battle, { draw: true });
+            }
+            await answerCallbackQuery(callbackId);
+            return;
+        }
+        // Delay before next round
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Next round
+        battle.round++;
+        battle.board = createEmptyBoard();
+        battle.turn = battle.players[(battle.round - 1) % 2];
+        if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
+        battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+        await sendRoundStart(battle);
+        await answerCallbackQuery(callbackId, "Hereket edildi!");
+        return;
+    }
+    // Continue for group match
+    battle.turn = battle.players.find((p: string) => p !== fromId)!;
+    const p1 = battle.players[0];
+    const p2 = battle.players[1];
+    const header = "⚔️ Group söweşi";
+    const marksText = `${await getMention(p1)} (${battle.marks[p1]}) vs ${await getMention(p2)} (${battle.marks[p2]})`;
+    const turnMention = await getMention(battle.turn);
+    const text =
+        `${header} — ${marksText}
+` +
+        `*Tur: ${battle.round}/${battle.rounds}*
+` +
+        `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}
+` +
+        `🎲 Hereket: ${turnMention}
+` +
+        boardToText(battle.board);
+    const msgId = battle.messageIds['group'];
+    const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
+    if (msgId) await editMessageText(battle.groupChatId, msgId, text, options); // Use editMessageText for group
+    else await sendMessage(battle.groupChatId, text, options);
+    await answerCallbackQuery(callbackId, "Hereket edildi!");
+    return;
+  }
+
+  // --- Standard Private/Boss Match Handling Logic ---
   if (data === "surrender") {
     const opponent = battle.players.find((p: string) => p !== fromId)!;
     if (battle.isGroup) {
@@ -920,12 +1025,10 @@ async function handleCallback(cb: any) {
     await answerCallbackQuery(callbackId, "Siz tabşyrdyňyz.");
     return;
   }
-
   if (!data.startsWith("move:")) {
     await answerCallbackQuery(callbackId);
     return;
   }
-
   const idx = parseInt(data.split(":")[1]);
   if (isNaN(idx) || idx < 0 || idx > 8) {
     await answerCallbackQuery(callbackId, "Nädogry hereket.", true);
@@ -939,10 +1042,8 @@ async function handleCallback(cb: any) {
     await answerCallbackQuery(callbackId, "Bu ýer eýýäm eýelenen.", true);
     return;
   }
-
   const mark = battle.marks[fromId];
   battle.board[idx] = mark;
-
   const winResult = checkWin(battle.board);
   let roundWinner: string | undefined;
   if (winResult) {
@@ -951,26 +1052,31 @@ async function handleCallback(cb: any) {
       roundWinner = battle.players.find((p: string) => battle.marks[p] === winner)!;
       battle.roundWins[roundWinner] = (battle.roundWins[roundWinner] || 0) + 1;
     }
-
     let boardText = boardToText(battle.board);
     if (line) {
-      boardText += `\n🎉 *Çyzyk:* ${line.map((i: number) => i + 1).join("-")}`;
+      boardText += `
+🎉 *Çyzyk:* ${line.map((i: number) => i + 1).join("-")}`;
     } else if (winner === "draw") {
-      boardText += `\n🤝 *Deňlik!*`;
+      boardText += `
+🤝 *Deňlik!*`;
     }
-
     if (battle.isGroup && battle.groupChatId) {
       const msgId = battle.messageIds['group'];
       const p1 = battle.players[0];
       const p2 = battle.players[1];
       const header = `⚔️ Group söweşi — ${await getMention(p1)} (${battle.marks[p1]}) vs ${await getMention(p2)} (${battle.marks[p2]})`;
-      let text = `${header}\n\n*Tur ${battle.round} Netijesi!*\n`;
-      if (winner === "draw") text += `🤝 Deňlik boldy!\n`;
+      let text = `${header}
+*Tur ${battle.round} Netijesi!*
+`;
+      if (winner === "draw") text += `🤝 Deňlik boldy!
+`;
       else {
         const roundWinnerMention = await getMention(roundWinner!);
-        text += `🎉 ${roundWinnerMention} turda ýeňdi!\n`;
+        text += `🎉 ${roundWinnerMention} turda ýeňdi!
+`;
       }
-      text += `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}\n${boardText}`;
+      text += `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}
+${boardText}`;
       const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
       if (msgId) await editMessageText(battle.groupChatId, msgId, text, options);
       else await sendMessage(battle.groupChatId, text, options);
@@ -978,16 +1084,20 @@ async function handleCallback(cb: any) {
       for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
         const msgId = battle.messageIds[player];
         const header = headerForPlayer(battle, player);
-        let text = `${header}\n\n*Tur ${battle.round} Netijesi!*\n`;
-        if (winner === "draw") text += `🤝 Deňlik boldy!\n`;
-        else text += `${roundWinner === player ? "🎉 Siz turda ýeňdiňiz!" : "😢 Siz turda utuldyňyz"}\n`;
-        text += `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n${boardText}`;
+        let text = `${header}
+*Tur ${battle.round} Netijesi!*
+`;
+        if (winner === "draw") text += `🤝 Deňlik boldy!
+`;
+        else text += `${roundWinner === player ? "🎉 Siz turda ýeňdiňiz!" : "😢 Siz turda utuldyňyz"}
+`;
+        text += `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}
+${boardText}`;
         const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
         if (msgId) await editMessageText(player, msgId, text, options);
         else await sendMessage(player, text, options);
       }
     }
-
     // Check if match over
     const neededWins = Math.ceil(battle.rounds / 2);
     if (battle.roundWins[battle.players[0]] >= neededWins || battle.roundWins[battle.players[1]] >= neededWins || battle.round === battle.rounds) {
@@ -1001,23 +1111,18 @@ async function handleCallback(cb: any) {
       await answerCallbackQuery(callbackId);
       return;
     }
-
     // Delay before next round
     await new Promise(resolve => setTimeout(resolve, 2000));
-
     // Next round
     battle.round++;
     battle.board = createEmptyBoard();
     battle.turn = battle.players[(battle.round - 1) % 2];
-
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
     battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
-
     await sendRoundStart(battle);
     await answerCallbackQuery(callbackId, "Hereket edildi!");
     return;
   }
-
   // Continue
   battle.turn = battle.players.find((p: string) => p !== fromId)!;
   if (battle.isGroup && battle.groupChatId) {
@@ -1027,10 +1132,14 @@ async function handleCallback(cb: any) {
     const marksText = `${await getMention(p1)} (${battle.marks[p1]}) vs ${await getMention(p2)} (${battle.marks[p2]})`;
     const turnMention = await getMention(battle.turn);
     const text =
-      `${header} — ${marksText}\n\n` +
-      `*Tur: ${battle.round}/${battle.rounds}*\n` +
-      `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}\n` +
-      `🎲 Hereket: ${turnMention}\n` +
+      `${header} — ${marksText}
+` +
+      `*Tur: ${battle.round}/${battle.rounds}*
+` +
+      `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}
+` +
+      `🎲 Hereket: ${turnMention}
+` +
       boardToText(battle.board);
     const msgId = battle.messageIds['group'];
     const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
@@ -1041,10 +1150,14 @@ async function handleCallback(cb: any) {
       const header = headerForPlayer(battle, player);
       const yourTurn = battle.turn === player;
       const text =
-        `${header}\n\n` +
-        `*Tur: ${battle.round}/${battle.rounds}*\n` +
-        `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n` +
-        `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}\n` +
+        `${header}
+` +
+        `*Tur: ${battle.round}/${battle.rounds}*
+` +
+        `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}
+` +
+        `🎲 Hereket: ${yourTurn ? "*Seniň hereketiň*" : "Garşydaşyň hereketi"}
+` +
         boardToText(battle.board);
       const msgId = battle.messageIds[player];
       const options = { reply_markup: makeInlineKeyboard(battle.board), parse_mode: "Markdown" };
@@ -1053,12 +1166,10 @@ async function handleCallback(cb: any) {
     }
   }
   await answerCallbackQuery(callbackId, "Hereket edildi!");
-
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
   }
 }
-
 // -------------------- Referral processing --------------------
 async function processReferral(userId: string) {
   const pendingRes = await kv.get<string>(["pending_referrals", userId]);
@@ -1072,16 +1183,20 @@ async function processReferral(userId: string) {
   }
   await kv.delete(["pending_referrals", userId]);
 }
-
 // -------------------- Show help and menu --------------------
 async function showHelpAndMenu(fromId: string) {
   const userCount = await getUserCount();
   const helpText =
-    `🌟 Salam! TkmXO BOT-a hoş geldiňiz!\n\n` +
-    `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️\n\n` +
-    `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄\n\n` +
-    `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸\n\n` +
-    `👥 Umumy ulanyjy sany: ${userCount}\n\n` +
+    `🌟 Salam! TkmXO BOT-a hoş geldiňiz!
+` +
+    `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️
+` +
+    `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄
+` +
+    `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸
+` +
+    `👥 Umumy ulanyjy sany: ${userCount}
+` +
     `🚀 Başlamak üçin aşakdaky düwmelerden birini saýla:`;
   const mainMenu = {
     inline_keyboard: [
@@ -1093,31 +1208,26 @@ async function showHelpAndMenu(fromId: string) {
   };
   await sendMessage(fromId, helpText, { parse_mode: "Markdown", reply_markup: mainMenu });
 }
-
 // -------------------- Withdrawal functionality --------------------
 async function handleWithdrawal(fromId: string, text: string) {
   const state = await getWithdrawalState(fromId);
   if (state) {
     if (state.step === "amount") {
       const amount = parseFloat(text);
-
       if (isNaN(amount) || amount <= 0) {
         await sendMessage(fromId, "❌ TMT mukdary dogry san bolmaly.");
         return;
       }
-
       if (amount < 5) {
         await sendMessage(fromId, "❌ Çykarmak üçin iň az 5 TMT gerek.");
         return;
       }
-
       const profile = await getProfile(fromId);
       if (!profile || profile.tmt < amount) {
         await sendMessage(fromId, `❌ Ýeterlik TMT ýok. Balans: ${profile?.tmt ?? 0} TMT.`);
         await setWithdrawalState(fromId, null);
         return;
       }
-
       await setWithdrawalState(fromId, { amount, step: "phone" });
       await sendMessage(fromId, "📱 Telefon nomeriňizi giriziň:");
       return;
@@ -1127,7 +1237,6 @@ async function handleWithdrawal(fromId: string, text: string) {
         await sendMessage(fromId, "❌ Dogry telefon giriziň.");
         return;
       }
-
       const amount = state.amount;
       const profile = await getProfile(fromId);
       if (!profile || profile.tmt < amount) {
@@ -1135,28 +1244,29 @@ async function handleWithdrawal(fromId: string, text: string) {
         await setWithdrawalState(fromId, null);
         return;
       }
-
       try {
         await updateProfile(fromId, { tmt: -amount });
-
         await sendMessage(
           fromId,
-          `✅ Çykarma islegi üstünlikli! Mukdar: ${amount} TMT\nTelefon: ${phoneNumber}\nİşlenýär...`,
+          `✅ Çykarma islegi üstünlikli! Mukdar: ${amount} TMT
+Telefon: ${phoneNumber}
+İşlenýär...`,
         );
-
         const adminProfile = await getProfileByUsername(ADMIN_USERNAME);
         const adminId = adminProfile?.id || `@${ADMIN_USERNAME}`;
         const userDisplayName = getDisplayName(profile);
-        const adminMessage = `💰 *ÇYKARMA ISLEGI*\n\nUlanyjy: ${userDisplayName} (ID: ${fromId})\nMukdar: ${amount} TMT\nTelefon: ${phoneNumber}\n\nEl bilen işläň.`;
+        const adminMessage = `💰 *ÇYKARMA ISLEGI*
+Ulanyjy: ${userDisplayName} (ID: ${fromId})
+Mukdar: ${amount} TMT
+Telefon: ${phoneNumber}
+El bilen işläň.`;
         await sendMessage(adminId, adminMessage, { parse_mode: "Markdown" });
-
         await setWithdrawalState(fromId, null);
       } catch (error) {
         console.error("Withdrawal error:", error);
         await sendMessage(fromId, "❌ Näsazlyk ýüze çykdy. Täzeden synanyşyň.");
         await setWithdrawalState(fromId, null);
       }
-
       return;
     }
   } else {
@@ -1165,7 +1275,6 @@ async function handleWithdrawal(fromId: string, text: string) {
     return;
   }
 }
-
 async function getProfileByUsername(username: string): Promise<Profile | null> {
   try {
     for await (const entry of kv.list({ prefix: ["profiles"] })) {
@@ -1178,7 +1287,6 @@ async function getProfileByUsername(username: string): Promise<Profile | null> {
   }
   return null;
 }
-
 // -------------------- Promocode handler --------------------
 async function handlePromocodeInput(fromId: string, text: string) {
   const code = text.trim();
@@ -1188,32 +1296,26 @@ async function handlePromocodeInput(fromId: string, text: string) {
     await setPromocodeState(fromId, false);
     return;
   }
-
   const promo = promoRes.value as { maxUses: number; currentUses: number };
   if (promo.currentUses >= promo.maxUses) {
     await sendMessage(fromId, "Bu promokod ýok ýa-da ulanylan.");
     await setPromocodeState(fromId, false);
     return;
   }
-
   const usedRes = await kv.get(["used_promos", code, fromId]);
   if (usedRes.value) {
     await sendMessage(fromId, "Siz bu promokody eýýäm ulandyňyz.");
     await setPromocodeState(fromId, false);
     return;
   }
-
   const atomic = kv.atomic()
     .set(["used_promos", code, fromId], true)
     .set(["promocodes", code], { ...promo, currentUses: promo.currentUses + 1 });
-
   await atomic.commit();
-
   await updateProfile(fromId, { tmt: 1 });
   await sendMessage(fromId, "✅ Promokod üstünlikli! +1 TMT aldyňyz.");
   await setPromocodeState(fromId, false);
 }
-
 // -------------------- Boss input handler --------------------
 async function handleBossInput(fromId: string, text: string) {
   const name = text.trim();
@@ -1223,31 +1325,25 @@ async function handleBossInput(fromId: string, text: string) {
     await setBossState(fromId, false);
     return;
   }
-
   const boss = bossRes.value as { photoId: string; rounds: number; maxUses: number; currentUses: number; reward: number };
   if (boss.currentUses >= boss.maxUses) {
     await sendMessage(fromId, "Bu boss ýok ýa-da ulanylan.");
     await setBossState(fromId, false);
     return;
   }
-
   const playedRes = await kv.get(["played_boss", name, fromId]);
   if (playedRes.value) {
     await sendMessage(fromId, "Siz bu boss bilen eýýäm oýnadyňyz.");
     await setBossState(fromId, false);
     return;
   }
-
   const atomic = kv.atomic()
     .set(["played_boss", name, fromId], true)
     .set(["bosses", name], { ...boss, currentUses: boss.currentUses + 1 });
-
   await atomic.commit();
-
   await startBossBattle(fromId, name, boss);
   await setBossState(fromId, false);
 }
-
 // -------------------- Create boss handler --------------------
 async function handleCreateBoss(msg: any, fromId: string) {
   const photo = msg.photo;
@@ -1274,12 +1370,10 @@ async function handleCreateBoss(msg: any, fromId: string) {
     await sendMessage(fromId, "Nädogry format.");
     return;
   }
-
   await kv.set(["bosses", name], { photoId, rounds, maxUses, currentUses: 0, reward });
   await sendMessage(fromId, `✅ Boss döredildi: ${name}`);
   await setCreateBossState(fromId, false);
 }
-
 // -------------------- Stats for admin --------------------
 async function sendStats(chatId: string) {
   let userCount = 0;
@@ -1289,7 +1383,6 @@ async function sendStats(chatId: string) {
   let totalTMT = 0;
   let bossCount = 0;
   let bossBattlesPlayed = 0;
-
   // Count users and sum stats
   for await (const entry of kv.list({ prefix: ["profiles"] })) {
     if (!entry.value) continue;
@@ -1300,14 +1393,12 @@ async function sendStats(chatId: string) {
     totalTrophies += p.trophies || 0;
     totalTMT += p.tmt || 0;
   }
-
   // Sum TMT from promocodes (assuming each use gives 1 TMT)
   for await (const entry of kv.list({ prefix: ["promocodes"] })) {
     if (!entry.value) continue;
     const promo = entry.value as { maxUses: number; currentUses: number };
     totalTMTFromPromos += promo.currentUses;
   }
-
   // Count bosses and sum battles
   for await (const entry of kv.list({ prefix: ["bosses"] })) {
     if (!entry.value) continue;
@@ -1315,20 +1406,24 @@ async function sendStats(chatId: string) {
     bossCount++;
     bossBattlesPlayed += boss.currentUses;
   }
-
   const msg = 
-    `📊 *Bot Statistika*\n\n` +
-    `👥 Ulanyjylar sany: *${userCount}*\n` +
-    `💰 Promokodlar arkaly berlen TMT: *${totalTMTFromPromos}*\n` +
-    `🎲 Jemi oýnalan oýunlar: *${totalGamesPlayed}*\n` +
-    `🏆 Jemi kuboklar: *${totalTrophies}*\n` +
-    `💰 Jemi TMT ulgamynda: *${totalTMT}*\n` +
-    `🤖 Bosslar sany: *${bossCount}*\n` +
+    `📊 *Bot Statistika*
+` +
+    `👥 Ulanyjylar sany: *${userCount}*
+` +
+    `💰 Promokodlar arkaly berlen TMT: *${totalTMTFromPromos}*
+` +
+    `🎲 Jemi oýnalan oýunlar: *${totalGamesPlayed}*
+` +
+    `🏆 Jemi kuboklar: *${totalTrophies}*
+` +
+    `💰 Jemi TMT ulgamynda: *${totalTMT}*
+` +
+    `🤖 Bosslar sany: *${bossCount}*
+` +
     `⚔️ Boss söweşleri sany: *${bossBattlesPlayed}*`;
-
   await sendMessage(chatId, msg, { parse_mode: "Markdown" });
 }
-
 // -------------------- User count helper --------------------
 async function getUserCount(): Promise<number> {
   let count = 0;
@@ -1344,7 +1439,6 @@ async function getUserCount(): Promise<number> {
   }
   return count;
 }
-
 // -------------------- Commands --------------------
 async function handleCommand(fromId: string, username: string | undefined, displayName: string, text: string, isNew: boolean) {
   if (!(await isSubscribed(fromId))) {
@@ -1357,9 +1451,7 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     });
     return;
   }
-
   await processReferral(fromId);
-
   // Close any active states before handling new command
   if (await getWithdrawalState(fromId)) {
     await sendMessage(fromId, "Çykarma sahypasy ýapyldy");
@@ -1381,7 +1473,6 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendMessage(fromId, "Global habar sahypasy ýapyldy");
     await setGlobalMessageState(fromId, false);
   }
-
   if (text.startsWith("/battle")) {
     if (queue.includes(fromId) || trophyQueue.includes(fromId)) {
       await sendMessage(fromId, "Siz eýýäm nobatda.");
@@ -1393,7 +1484,6 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     }
     queue.push(fromId);
     await sendMessage(fromId, "🔍 Garşydaş gözlenýär...");
-
     searchTimeouts[fromId] = setTimeout(async () => {
       const index = queue.indexOf(fromId);
       if (index !== -1) {
@@ -1402,21 +1492,18 @@ async function handleCommand(fromId: string, username: string | undefined, displ
         await sendMessage(fromId, "⏱️ Gözleg togtadyldy. Garşydaş tapylmady.");
       }
     }, 30_000) as unknown as number;
-
     if (queue.length >= 2) {
       const [p1, p2] = queue.splice(0, 2);
       await startBattle(p1, p2);
     }
     return;
   }
-
   if (text.startsWith("/realbattle")) {
     const profile = await getProfile(fromId);
     if (!profile || profile.tmt < 1) {
       await sendMessage(fromId, "❌ TMT söweş üçin 1 TMT gerek. @Masakoff bilen baglanyş.");
       return;
     }
-
     if (queue.includes(fromId) || trophyQueue.includes(fromId)) {
       await sendMessage(fromId, "Siz eýýäm nobatda.");
       return;
@@ -1425,11 +1512,9 @@ async function handleCommand(fromId: string, username: string | undefined, displ
       await sendMessage(fromId, "Siz eýýäm oýunda.");
       return;
     }
-
     await updateProfile(fromId, { tmt: -1 });
     trophyQueue.push(fromId);
     await sendMessage(fromId, "🔍 TMT söweş üçin garşydaş gözlenýär... (1 TMT goýuldy)");
-
     searchTimeouts[fromId] = setTimeout(async () => {
       const index = trophyQueue.indexOf(fromId);
       if (index !== -1) {
@@ -1439,19 +1524,16 @@ async function handleCommand(fromId: string, username: string | undefined, displ
         delete searchTimeouts[fromId];
       }
     }, 30_000) as unknown as number;
-
     if (trophyQueue.length >= 2) {
       const [p1, p2] = trophyQueue.splice(0, 2);
       await startBattle(p1, p2, true);
     }
     return;
   }
-
   if (text.startsWith("/profile")) {
     await sendProfile(fromId);
     return;
   }
-
   if (text.startsWith("/userprofile")) {
     if (username !== ADMIN_USERNAME) {
       await sendMessage(fromId, "❌ Ruhsat ýok.");
@@ -1466,24 +1548,20 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendUserProfile(fromId, userId);
     return;
   }
-
   if (text.startsWith("/leaderboard")) {
     await sendLeaderboard(fromId);
     return;
   }
-
   if (text.startsWith("/promocode")) {
     await setPromocodeState(fromId, true);
     await sendMessage(fromId, "Promokody giriziň:");
     return;
   }
-
   if (text.startsWith("/boss")) {
     await setBossState(fromId, true);
     await sendMessage(fromId, "Boss adyny giriziň:");
     return;
   }
-
   if (text.startsWith("/createpromocode")) {
     if (username !== ADMIN_USERNAME) {
       await sendMessage(fromId, "❌ Ruhsat ýok.");
@@ -1504,7 +1582,6 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendMessage(fromId, `✅ Promokod döredildi: ${code} (sany: ${maxUses})`);
     return;
   }
-
   if (text.startsWith("/createboss")) {
     if (username !== ADMIN_USERNAME) {
       await sendMessage(fromId, "❌ Ruhsat ýok.");
@@ -1514,7 +1591,6 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendMessage(fromId, "Boss suratyny ýazgy bilen iberiň: <aty> <turlar> <max_sany> <baha>");
     return;
   }
-
   if (text.startsWith("/addtouser")) {
     if (username !== ADMIN_USERNAME) {
       await sendMessage(fromId, "❌ Ruhsat ýok.");
@@ -1542,7 +1618,6 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     }
     return;
   }
-
   if (text.startsWith("/globalmessage")) {
     if (username !== ADMIN_USERNAME) {
       await sendMessage(fromId, "❌ Ruhsat ýok.");
@@ -1552,7 +1627,6 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendMessage(fromId, "✏️ Global habary ýazyň:");
     return;
   }
-
   if (text.startsWith("/withdraw")) {
     const profile = await getProfile(fromId);
     if (!profile) {
@@ -1566,7 +1640,6 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await handleWithdrawal(fromId, "");
     return;
   }
-
   if (text.startsWith("/stats")) {
     if (username !== ADMIN_USERNAME) {
       await sendMessage(fromId, "❌ Ruhsat ýok.");
@@ -1575,7 +1648,6 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendStats(fromId);
     return;
   }
-
   if (text.startsWith("/deleteuser")) {
     if (username !== ADMIN_USERNAME) {
       await sendMessage(fromId, "❌ Ruhsat ýok.");
@@ -1622,15 +1694,12 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     await sendMessage(fromId, `✅ Ulanyjy ID:${userId} öçürildi.`);
     return;
   }
-
   if (text.startsWith("/start") || text.startsWith("/help")) {
     await showHelpAndMenu(fromId);
     return;
   }
-
   await sendMessage(fromId, "❓ Näbelli buýruk. /help gör.");
 }
-
 // -------------------- Group match handler --------------------
 async function handleGroupMatch(msg: any) {
   const fromId = String(msg.from.id);
@@ -1665,16 +1734,13 @@ async function handleGroupMatch(msg: any) {
   }, 60 * 1000) as unknown as number;
   groupMatches[starter] = {msgId: joinMsgId, groupId, timeoutId};
 }
-
 // -------------------- Server / Webhook --------------------
 serve(async (req: Request) => {
   try {
     const url = new URL(req.url);
     if (url.pathname !== SECRET_PATH) return new Response("Not found", { status: 404 });
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
-
     const update = await req.json();
-
     // handle normal messages
     if (update.message) {
       const msg = update.message;
@@ -1683,19 +1749,15 @@ serve(async (req: Request) => {
       const fromId = String(from.id);
       const username = from.username;
       const displayName = from.first_name || from.username || fromId;
-
       let referrerId: string | undefined;
       if (text.startsWith("/start") && text.length > 6) {
         const parts = text.split(/\s+/);
         if (parts.length > 1) referrerId = parts[1];
       }
-
       const { profile, isNew } = await initProfile(fromId, username, displayName);
-
       if (referrerId && isNew && referrerId !== fromId) {
         await kv.set(["pending_referrals", fromId], referrerId);
       }
-
       if (msg.chat.type === "private") {
         if (text.startsWith("/")) {
           await handleCommand(fromId, username, displayName, text, isNew);
@@ -1704,7 +1766,8 @@ serve(async (req: Request) => {
           for await (const entry of kv.list({ prefix: ["profiles"] })) {
             const profile = entry.value as Profile;
             if (!profile) continue;
-            await sendMessage(profile.id, `📢 *Global habar:*\n\n${text}`, { parse_mode: "Markdown" });
+            await sendMessage(profile.id, `📢 *Global habar:*
+${text}`, { parse_mode: "Markdown" });
           }
           await sendMessage(fromId, "✅ Global habar iberildi!");
         } else if (await getWithdrawalState(fromId)) {
@@ -1726,7 +1789,6 @@ serve(async (req: Request) => {
     else if (update.callback_query) {
       await handleCallback(update.callback_query);
     }
-
     return new Response("OK");
   } catch (e) {
     console.error("server error", e);
