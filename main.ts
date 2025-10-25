@@ -536,25 +536,70 @@ async function endTurnIdle(battle: any) {
   const loser = battle.turn;
   const winner = battle.players.find((p: string) => p !== loser)!;
 
+  battle.roundWins[winner] += 1;
+
+  let boardText = boardToText(battle.board);
+  boardText += `\n😢 *Tur ýitirildi (gijä galma sebäpli)*`;
+
   if (battle.isGroup) {
     const loserMention = await getMention(loser);
     const winnerMention = await getMention(winner);
-    await sendMessage(battle.groupChatId, `⚠️ ${loserMention} hereketde gijä galdy. ${winnerMention} ýeňdi!`, { parse_mode: "Markdown" });
+    await sendMessage(battle.groupChatId, `⚠️ ${loserMention} hereketde gijä galdy. Tur ýeňiji: ${winnerMention}!`, { parse_mode: "Markdown" });
+    const msgId = battle.messageIds['group'];
+    const p1 = battle.players[0];
+    const p2 = battle.players[1];
+    const header = `⚔️ Group söweşi — ${await getMention(p1)} (${battle.marks[p1]}) vs ${await getMention(p2)} (${battle.marks[p2]})`;
+    let text = `${header}\n\n*Tur ${battle.round} Netijesi!*\n`;
+    const roundWinnerMention = await getMention(winner);
+    text += `🎉 ${roundWinnerMention} turda ýeňdi (gijä galma sebäpli)!\n`;
+    text += `📊 Hesap: ${battle.roundWins[p1]} - ${battle.roundWins[p2]}\n${boardText}`;
+    const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
+    if (msgId) await editMessageText(battle.groupChatId, msgId, text, options);
   } else {
-    await sendMessage(loser, "⚠️ Hereketde gijä galdyňyz. Siz tabşyrdyňyz.");
-    if (!battle.isBoss) await sendMessage(winner, "⚠️ Garşydaş gijä galdy. Siz ýeňdiňiz!");
+    await sendMessage(loser, "⚠️ Hereketde gijä galdyňyz. Siz bu turda utuldyňyz.");
+    if (!battle.isBoss) await sendMessage(winner, "⚠️ Garşydaş gijä galdy. Siz bu turda ýeňdiňiz!");
+    for (const player of battle.players.filter((p: string) => !p.startsWith("boss_"))) {
+      const msgId = battle.messageIds[player];
+      const header = headerForPlayer(battle, player);
+      let text = `${header}\n\n*Tur ${battle.round} Netijesi!*\n`;
+      text += `${winner === player ? "🎉 Siz turda ýeňdiňiz (garşydaş gijä galdy)!" : "😢 Siz turda utuldyňyz (gijä galdyňyz)"}\n`;
+      text += `📊 Hesap: ${battle.roundWins[battle.players[0]]} - ${battle.roundWins[battle.players[1]]}\n${boardText}`;
+      const options = { reply_markup: makeInlineKeyboard(battle.board, true), parse_mode: "Markdown" };
+      if (msgId) await editMessageText(player, msgId, text, options);
+    }
   }
 
-  if (battle.idleTimerId) {
-    clearTimeout(battle.idleTimerId);
-    delete battle.idleTimerId;
-  }
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
     delete battle.moveTimerId;
   }
 
-  await finishMatch(battle, { winner: winner, loser: loser });
+  const neededWins = Math.ceil(battle.rounds / 2);
+  if (battle.roundWins[battle.players[0]] >= neededWins || battle.roundWins[battle.players[1]] >= neededWins || battle.round === battle.rounds) {
+    let result: { winner?: string; loser?: string; draw?: boolean } = {};
+    if (battle.roundWins[battle.players[0]] > battle.roundWins[battle.players[1]]) {
+      result = { winner: battle.players[0], loser: battle.players[1] };
+    } else if (battle.roundWins[battle.players[1]] > battle.roundWins[battle.players[0]]) {
+      result = { winner: battle.players[1], loser: battle.players[0] };
+    } else {
+      result = { draw: true };
+    }
+    await finishMatch(battle, result);
+    return;
+  }
+
+  // Delay before next round
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // Next round
+  battle.round++;
+  battle.board = createEmptyBoard();
+  battle.turn = battle.players[(battle.round - 1) % 2];
+
+  if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
+  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000);
+
+  await sendRoundStart(battle);
 }
 
 async function sendRoundStart(battle: any) {
@@ -602,12 +647,12 @@ async function sendRoundStart(battle: any) {
   if (battle.idleTimerId) {
     clearTimeout(battle.idleTimerId);
   }
-  battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 3 * 60 * 1000); // Reduced to 3 minutes
+  battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 5 * 60 * 1000);
 
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
   }
-  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000);
 
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
@@ -617,10 +662,10 @@ async function sendRoundStart(battle: any) {
 async function endBattleIdle(battle: any) {
   const [p1, p2] = battle.players;
   if (battle.isGroup) {
-    await sendMessage(battle.groupChatId, "⚠️ Oýun hereketsizlik sebäpli ýatyryldy (3 minut).");
+    await sendMessage(battle.groupChatId, "⚠️ Oýun hereketsizlik sebäpli ýatyryldy (5 minut).");
   } else {
-    await sendMessage(p1, "⚠️ Oýun hereketsizlik sebäpli ýatyryldy (3 minut).");
-    if (!p2.startsWith("boss_")) await sendMessage(p2, "⚠️ Oýun hereketsizlik sebäpli ýatyryldy (3 minut).");
+    await sendMessage(p1, "⚠️ Oýun hereketsizlik sebäpli ýatyryldy (5 minut).");
+    if (!p2.startsWith("boss_")) await sendMessage(p2, "⚠️ Oýun hereketsizlik sebäpli ýatyryldy (5 minut).");
   }
 
   if (battle.isTrophyBattle) {
@@ -796,7 +841,7 @@ async function makeBossMove(battle: any) {
     battle.turn = battle.players[(battle.round - 1) % 2];
 
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000);
 
     await sendRoundStart(battle);
     return;
@@ -897,12 +942,12 @@ async function handleCallback(cb: any) {
   // Reset timers
   if (battle.idleTimerId) {
     clearTimeout(battle.idleTimerId);
-    battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 3 * 60 * 1000); // Reduced to 3 minutes
+    battle.idleTimerId = setTimeout(() => endBattleIdle(battle), 5 * 60 * 1000);
   }
 
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000);
   }
 
   if (data === "surrender") {
@@ -1011,7 +1056,7 @@ async function handleCallback(cb: any) {
     battle.turn = battle.players[(battle.round - 1) % 2];
 
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000);
 
     await sendRoundStart(battle);
     await answerCallbackQuery(callbackId, "Hereket edildi!");
@@ -1080,7 +1125,7 @@ async function showHelpAndMenu(fromId: string) {
     `🌟 Salam! TkmXO BOT-a hoş geldiňiz!\n\n` +
     `🎮 TkmXO oýuny bilen, söweş ediň we gazanç alyň. ⚔️\n\n` +
     `🎁 Başlangyç üçin ⚔️ Kubok söweş bilen kubok üçin söweş utsaňyz +1 kubok gazanyň,utulsaňyz -1 kubok. TMT-a oýnamak üçin 🏆 TMT söweş bilen 1 TMT goýuň we utsaňyz onuň üstüne +0.75 TMT gazanyň,utulsaňyz -1 TMT. 😄\n\n` +
-    `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.2 TMT gazanyň. 💸\n\n` +
+    `👥 Dostlaryňyzy çagyryň we TMT gazanyň! Çagyran her bir dostuňyz üçin 0.05 TMT gazanyň. 💸\n\n` +
     `👥 Umumy ulanyjy sany: ${userCount}\n\n` +
     `🚀 Başlamak üçin aşakdaky düwmelerden birini saýla:`;
   const mainMenu = {
@@ -1383,6 +1428,11 @@ async function handleCommand(fromId: string, username: string | undefined, displ
   }
 
   if (text.startsWith("/battle")) {
+    if (groupMatches[fromId]) {
+      clearTimeout(groupMatches[fromId].timeoutId);
+      await deleteMessage(groupMatches[fromId].groupId, groupMatches[fromId].msgId);
+      delete groupMatches[fromId];
+    }
     if (queue.includes(fromId) || trophyQueue.includes(fromId)) {
       await sendMessage(fromId, "Siz eýýäm nobatda.");
       return;
@@ -1411,6 +1461,11 @@ async function handleCommand(fromId: string, username: string | undefined, displ
   }
 
   if (text.startsWith("/realbattle")) {
+    if (groupMatches[fromId]) {
+      clearTimeout(groupMatches[fromId].timeoutId);
+      await deleteMessage(groupMatches[fromId].groupId, groupMatches[fromId].msgId);
+      delete groupMatches[fromId];
+    }
     const profile = await getProfile(fromId);
     if (!profile || profile.tmt < 1) {
       await sendMessage(fromId, "❌ TMT söweş üçin 1 TMT gerek. @Masakoff bilen baglanyş.");
@@ -1443,6 +1498,30 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     if (trophyQueue.length >= 2) {
       const [p1, p2] = trophyQueue.splice(0, 2);
       await startBattle(p1, p2, true);
+    }
+    return;
+  }
+
+  if (text.startsWith("/cancel")) {
+    if (queue.includes(fromId)) {
+      const index = queue.indexOf(fromId);
+      queue.splice(index, 1);
+      if (searchTimeouts[fromId]) {
+        clearTimeout(searchTimeouts[fromId]);
+        delete searchTimeouts[fromId];
+      }
+      await sendMessage(fromId, "✅ Kubok söweş nobatdan çykdyňyz.");
+    } else if (trophyQueue.includes(fromId)) {
+      const index = trophyQueue.indexOf(fromId);
+      trophyQueue.splice(index, 1);
+      await updateProfile(fromId, { tmt: 1 });
+      if (searchTimeouts[fromId]) {
+        clearTimeout(searchTimeouts[fromId]);
+        delete searchTimeouts[fromId];
+      }
+      await sendMessage(fromId, "✅ TMT söweş nobatdan çykdyňyz. 1 TMT yzyna gaýtaryldy.");
+    } else {
+      await sendMessage(fromId, "Siz nobatda däl.");
     }
     return;
   }
@@ -1647,6 +1726,16 @@ async function handleGroupMatch(msg: any) {
   }
   if (battles[fromId]) {
     // Delete the /groupmatch message
+    await deleteMessage(msg.chat.id, msg.message_id);
+    return;
+  }
+  if (queue.includes(fromId) || trophyQueue.includes(fromId)) {
+    await sendMessage(msg.chat.id, "Siz kubok ýa-da TMT söweş nobatda. Ilki çykmak üçin /cancel giriziň (private chatda).");
+    await deleteMessage(msg.chat.id, msg.message_id);
+    return;
+  }
+  if (groupMatches[fromId]) {
+    await sendMessage(msg.chat.id, "Siz eýýäm group söweş gözleýärsiňiz.");
     await deleteMessage(msg.chat.id, msg.message_id);
     return;
   }
