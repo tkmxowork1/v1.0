@@ -595,7 +595,7 @@ async function sendRoundStart(battle: any) {
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
   }
-  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+  battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000); // Increased to 60 seconds for slow internet
 
   if (battle.isBoss && battle.turn.startsWith("boss_")) {
     await makeBossMove(battle);
@@ -780,7 +780,7 @@ async function makeBossMove(battle: any) {
     battle.turn = battle.players[(battle.round - 1) % 2];
 
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000); // Increased to 60 seconds for slow internet
 
     await sendRoundStart(battle);
     return;
@@ -885,7 +885,7 @@ async function handleCallback(cb: any) {
 
   if (battle.moveTimerId) {
     clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000); // Increased to 60 seconds for slow internet
   }
 
   if (data === "surrender") {
@@ -989,7 +989,7 @@ async function handleCallback(cb: any) {
     battle.turn = battle.players[(battle.round - 1) % 2];
 
     if (battle.moveTimerId) clearTimeout(battle.moveTimerId);
-    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 30 * 1000); // Reduced to 30 seconds
+    battle.moveTimerId = setTimeout(() => endTurnIdle(battle), 60 * 1000); // Increased to 60 seconds for slow internet
 
     await sendRoundStart(battle);
     await answerCallbackQuery(callbackId, "Hereket edildi!");
