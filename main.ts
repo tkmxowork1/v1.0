@@ -887,17 +887,13 @@ async function handleCallback(cb: any) {
   if (data.startsWith("move:") || data === "surrender") {
     const battle = battles[fromId];
     if (!battle) {
-      await answerCallbackQuery(callbackId, "Bu oýun siziň däl.", true);
+      await answerCallbackQuery(callbackId);
       return;
     }
   }
 
   const battle = battles[fromId];
   if (!battle) {
-    if (data === "surrender") {
-      await answerCallbackQuery(callbackId, "Siz oýunda däl.", true);
-      return;
-    }
     await answerCallbackQuery(callbackId);
     return;
   }
