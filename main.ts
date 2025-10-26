@@ -884,6 +884,14 @@ async function handleCallback(cb: any) {
     return;
   }
 
+  if (data.startsWith("move:") || data === "surrender") {
+    const battle = battles[fromId];
+    if (!battle) {
+      await answerCallbackQuery(callbackId, "Bu oýun siziň däl.", true);
+      return;
+    }
+  }
+
   const battle = battles[fromId];
   if (!battle) {
     if (data === "surrender") {
