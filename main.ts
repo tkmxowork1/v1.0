@@ -9,7 +9,6 @@
 // New: Referral system - 0.05 TMT per new referral who starts the bot first time
 //
 // Notes: Requires BOT_TOKEN env var and Deno KV. Deploy as webhook at SECRET_PATH.
-// New: Integrated Telegram Mini App served at /miniapp. Replace 'https://your-domain.com/miniapp' with your actual deployed URL in the code.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
@@ -1098,7 +1097,6 @@ async function showHelpAndMenu(fromId: string) {
       [{ text: "🤖 Boss söweş", callback_data: "menu:boss" }, { text: "🎟️ Promokod", callback_data: "menu:promocode" }],
       [{ text: "📊 Profil", callback_data: "menu:profile" }, { text: "🏅 Liderler", callback_data: "menu:leaderboard" }],
       [{ text: "💸 Puly çekmek", callback_data: "menu:withdraw" }],
-      [{ text: "🌐 Mini App", web_app: { url: "https://your-domain.com/miniapp" } }]  // Replace with your deployed URL
     ]
   };
   await sendMessage(fromId, helpText, { parse_mode: "Markdown", reply_markup: mainMenu });
@@ -1676,58 +1674,10 @@ async function handleGroupMatch(msg: any) {
   groupMatches[starter] = {msgId: joinMsgId, groupId, timeoutId};
 }
 
-// -------------------- Mini App HTML Content --------------------
-const miniAppHtml = `
-<!DOCTYPE html>
-<html lang="tk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TkmXO Mini App</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f0f0; padding: 20px; }
-        h1 { color: #333; }
-        button { display: block; width: 100%; margin: 10px 0; padding: 15px; font-size: 18px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-    </style>
-</head>
-<body>
-    <h1>Hoş geldiňiz, TkmXO Mini App!</h1>
-    <p>Bu mini app arkaly botuň ähli funksiýalaryny ulanyň.</p>
-    <button onclick="sendCommand('/battle')">⚔️ Kubok söweş</button>
-    <button onclick="sendCommand('/realbattle')">🏆 TMT söweş</button>
-    <button onclick="sendCommand('/boss')">🤖 Boss söweş</button>
-    <button onclick="sendCommand('/promocode')">🎟️ Promokod</button>
-    <button onclick="sendCommand('/profile')">📊 Profil</button>
-    <button onclick="sendCommand('/leaderboard')">🏅 Liderler</button>
-    <button onclick="sendCommand('/withdraw')">💸 Puly çekmek</button>
-    <script>
-        Telegram.WebApp.ready();
-        Telegram.WebApp.expand();
-
-        function sendCommand(cmd) {
-            Telegram.WebApp.sendData(cmd);
-            // Telegram.WebApp.close(); // Uncomment if you want to close the app after sending
-        }
-    </script>
-</body>
-</html>
-`;
-
 // -------------------- Server / Webhook --------------------
 serve(async (req: Request) => {
   try {
     const url = new URL(req.url);
-    
-    // Serve Mini App HTML
-    if (url.pathname === "/miniapp") {
-      return new Response(miniAppHtml, {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
-    }
-    
-    // Webhook path for Telegram updates
     if (url.pathname !== SECRET_PATH) return new Response("Not found", { status: 404 });
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
@@ -1736,7 +1686,7 @@ serve(async (req: Request) => {
     // handle normal messages
     if (update.message) {
       const msg = update.message;
-      let text = (msg.text || "").trim();
+      const text = (msg.text || "").trim();
       const from = msg.from;
       const fromId = String(from.id);
       const username = from.username;
@@ -1752,11 +1702,6 @@ serve(async (req: Request) => {
 
       if (referrerId && isNew && referrerId !== fromId) {
         await kv.set(["pending_referrals", fromId], referrerId);
-      }
-
-      // Handle commands from Mini App via web_app_data
-      if (msg.web_app_data) {
-        text = msg.web_app_data.data.trim();
       }
 
       if (msg.chat.type === "private") {
