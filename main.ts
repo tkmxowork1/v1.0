@@ -98,6 +98,58 @@ async function setGlobalMessageState(userId: string, active: boolean) {
   }
 }
 
+async function getAddToUserState(userId: string): Promise<boolean> {
+  const res = await kv.get<boolean>(["states", "addtouser", userId]);
+  return res.value ?? false;
+}
+
+async function setAddToUserState(userId: string, active: boolean) {
+  if (active) {
+    await kv.set(["states", "addtouser", userId], true);
+  } else {
+    await kv.delete(["states", "addtouser", userId]);
+  }
+}
+
+async function getCreatePromocodeState(userId: string): Promise<boolean> {
+  const res = await kv.get<boolean>(["states", "createpromocode", userId]);
+  return res.value ?? false;
+}
+
+async function setCreatePromocodeState(userId: string, active: boolean) {
+  if (active) {
+    await kv.set(["states", "createpromocode", userId], true);
+  } else {
+    await kv.delete(["states", "createpromocode", userId]);
+  }
+}
+
+async function getDeleteUserState(userId: string): Promise<boolean> {
+  const res = await kv.get<boolean>(["states", "deleteuser", userId]);
+  return res.value ?? false;
+}
+
+async function setDeleteUserState(userId: string, active: boolean) {
+  if (active) {
+    await kv.set(["states", "deleteuser", userId], true);
+  } else {
+    await kv.delete(["states", "deleteuser", userId]);
+  }
+}
+
+async function getUserProfileState(userId: string): Promise<boolean> {
+  const res = await kv.get<boolean>(["states", "userprofile", userId]);
+  return res.value ?? false;
+}
+
+async function setUserProfileState(userId: string, active: boolean) {
+  if (active) {
+    await kv.set(["states", "userprofile", userId], true);
+  } else {
+    await kv.delete(["states", "userprofile", userId]);
+  }
+}
+
 // -------------------- Telegram helpers --------------------
 async function sendMessage(chatId: string | number, text: string, options: any = {}): Promise<number | null> {
   try {
@@ -884,6 +936,33 @@ async function handleCallback(cb: any) {
     return;
   }
 
+  if (data.startsWith("admin:")) {
+    const action = data.split(":")[1];
+    await answerCallbackQuery(callbackId);
+    if (action === "addtouser") {
+      await setAddToUserState(fromId, true);
+      await sendMessage(fromId, "Giriziň: tmt|trophies <userId> <mukdar>");
+    } else if (action === "createpromocode") {
+      await setCreatePromocodeState(fromId, true);
+      await sendMessage(fromId, "Giriziň: <kod> <sany>");
+    } else if (action === "createboss") {
+      await setCreateBossState(fromId, true);
+      await sendMessage(fromId, "Boss suratyny ýazgy bilen iberiň: <aty> <turlar> <max_sany> <baha>");
+    } else if (action === "globalmessage") {
+      await setGlobalMessageState(fromId, true);
+      await sendMessage(fromId, "✏️ Global habary ýazyň:");
+    } else if (action === "stats") {
+      await sendStats(fromId);
+    } else if (action === "deleteuser") {
+      await setDeleteUserState(fromId, true);
+      await sendMessage(fromId, "Giriziň: <userId>");
+    } else if (action === "userprofile") {
+      await setUserProfileState(fromId, true);
+      await sendMessage(fromId, "Giriziň: <userId>");
+    }
+    return;
+  }
+
   if (data.startsWith("move:") || data === "surrender") {
     const battle = battles[fromId];
     if (!battle) {
@@ -1102,6 +1181,23 @@ async function showHelpAndMenu(fromId: string) {
   await sendMessage(fromId, helpText, { parse_mode: "Markdown", reply_markup: mainMenu });
 }
 
+// -------------------- Show admin panel --------------------
+async function showAdminPanel(fromId: string) {
+  const msg = "📋 *Admin Paneli*\n\nAşakdaky funksiýalary saýlaň:";
+  const keyboard = {
+    inline_keyboard: [
+      [{ text: "➕ Ulanyja goşmak", callback_data: "admin:addtouser" }],
+      [{ text: "🎟️ Promokod döret", callback_data: "admin:createpromocode" }],
+      [{ text: "🤖 Boss döret", callback_data: "admin:createboss" }],
+      [{ text: "📢 Global habar", callback_data: "admin:globalmessage" }],
+      [{ text: "📊 Statistika", callback_data: "admin:stats" }],
+      [{ text: "🗑️ Ulanyjy öçür", callback_data: "admin:deleteuser" }],
+      [{ text: "👤 Ulanyjy profili", callback_data: "admin:userprofile" }],
+    ]
+  };
+  await sendMessage(fromId, msg, { parse_mode: "Markdown", reply_markup: keyboard });
+}
+
 // -------------------- Withdrawal functionality --------------------
 async function handleWithdrawal(fromId: string, text: string) {
   const state = await getWithdrawalState(fromId);
@@ -1288,6 +1384,97 @@ async function handleCreateBoss(msg: any, fromId: string) {
   await setCreateBossState(fromId, false);
 }
 
+// -------------------- Admin input handlers --------------------
+async function handleAddToUserInput(fromId: string, text: string) {
+  const parts = text.trim().split(/\s+/);
+  if (parts.length < 3) {
+    await sendMessage(fromId, "Nädogry format. Ulanyş: tmt|trophies <userId> <mukdar>");
+    return;
+  }
+  const [type, userId, amountStr] = parts;
+  const amount = parseFloat(amountStr);
+  if (isNaN(amount)) {
+    await sendMessage(fromId, "Nädogry mukdar.");
+    return;
+  }
+  if (type === "tmt") {
+    await updateProfile(userId, { tmt: amount });
+    await sendMessage(fromId, `✅ ${amount} TMT goşuldy ID:${userId}`);
+  } else if (type === "trophies") {
+    await updateProfile(userId, { trophies: amount });
+    await sendMessage(fromId, `✅ ${amount} kubok goşuldy ID:${userId}`);
+  } else {
+    await sendMessage(fromId, "Nädogry tip: tmt ýa-da trophies.");
+    return;
+  }
+  await setAddToUserState(fromId, false);
+}
+
+async function handleCreatePromocodeInput(fromId: string, text: string) {
+  const parts = text.trim().split(/\s+/);
+  if (parts.length < 2) {
+    await sendMessage(fromId, "Nädogry format. Ulanyş: <kod> <sany>");
+    return;
+  }
+  const [code, maxStr] = parts;
+  const maxUses = parseInt(maxStr);
+  if (isNaN(maxUses) || maxUses < 1) {
+    await sendMessage(fromId, "Nädogry san.");
+    return;
+  }
+  await kv.set(["promocodes", code], { maxUses, currentUses: 0 });
+  await sendMessage(fromId, `✅ Promokod döredildi: ${code} (sany: ${maxUses})`);
+  await setCreatePromocodeState(fromId, false);
+}
+
+async function handleDeleteUserInput(fromId: string, text: string) {
+  const userId = text.trim();
+  // Remove from queues
+  queue = queue.filter(id => id !== userId);
+  trophyQueue = trophyQueue.filter(id => id !== userId);
+  // Clear search timeout
+  if (searchTimeouts[userId]) {
+    clearTimeout(searchTimeouts[userId]);
+    delete searchTimeouts[userId];
+  }
+  // If in battle
+  if (battles[userId]) {
+    await endBattleIdle(battles[userId]);
+  }
+  // Delete profile
+  await kv.delete(["profiles", userId]);
+  // Delete used_promos
+  for await (const entry of kv.list({ prefix: ["promocodes"] })) {
+    const code = entry.key[1] as string;
+    await kv.delete(["used_promos", code, userId]);
+  }
+  // Delete played_boss
+  for await (const entry of kv.list({ prefix: ["bosses"] })) {
+    const name = entry.key[1] as string;
+    await kv.delete(["played_boss", name, userId]);
+  }
+  // Delete states
+  await setWithdrawalState(userId, null);
+  await setPromocodeState(userId, false);
+  await setBossState(userId, false);
+  await setCreateBossState(userId, false);
+  await setGlobalMessageState(userId, false);
+  await setAddToUserState(userId, false);
+  await setCreatePromocodeState(userId, false);
+  await setDeleteUserState(userId, false);
+  await setUserProfileState(userId, false);
+  // Delete pending referral
+  await kv.delete(["pending_referrals", userId]);
+  await sendMessage(fromId, `✅ Ulanyjy ID:${userId} öçürildi.`);
+  await setDeleteUserState(fromId, false);
+}
+
+async function handleUserProfileInput(fromId: string, text: string) {
+  const userId = text.trim();
+  await sendUserProfile(fromId, userId);
+  await setUserProfileState(fromId, false);
+}
+
 // -------------------- Stats for admin --------------------
 async function sendStats(chatId: string) {
   let userCount = 0;
@@ -1388,6 +1575,22 @@ async function handleCommand(fromId: string, username: string | undefined, displ
   if (await getGlobalMessageState(fromId)) {
     await sendMessage(fromId, "Global habar sahypasy ýapyldy");
     await setGlobalMessageState(fromId, false);
+  }
+  if (await getAddToUserState(fromId)) {
+    await sendMessage(fromId, "Add to user sahypasy ýapyldy");
+    await setAddToUserState(fromId, false);
+  }
+  if (await getCreatePromocodeState(fromId)) {
+    await sendMessage(fromId, "Create promocode sahypasy ýapyldy");
+    await setCreatePromocodeState(fromId, false);
+  }
+  if (await getDeleteUserState(fromId)) {
+    await sendMessage(fromId, "Delete user sahypasy ýapyldy");
+    await setDeleteUserState(fromId, false);
+  }
+  if (await getUserProfileState(fromId)) {
+    await sendMessage(fromId, "User profile sahypasy ýapyldy");
+    await setUserProfileState(fromId, false);
   }
 
   if (text.startsWith("/battle")) {
@@ -1631,6 +1834,15 @@ async function handleCommand(fromId: string, username: string | undefined, displ
     return;
   }
 
+  if (text.startsWith("/admin")) {
+    if (username !== ADMIN_USERNAME) {
+      await sendMessage(fromId, "❌ Ruhsat ýok.");
+      return;
+    }
+    await showAdminPanel(fromId);
+    return;
+  }
+
   if (text.startsWith("/start") || text.startsWith("/help")) {
     await showHelpAndMenu(fromId);
     return;
@@ -1715,6 +1927,14 @@ serve(async (req: Request) => {
             await sendMessage(profile.id, `📢 *Global habar:*\n\n${text}`, { parse_mode: "Markdown" });
           }
           await sendMessage(fromId, "✅ Global habar iberildi!");
+        } else if (await getAddToUserState(fromId)) {
+          await handleAddToUserInput(fromId, text);
+        } else if (await getCreatePromocodeState(fromId)) {
+          await handleCreatePromocodeInput(fromId, text);
+        } else if (await getDeleteUserState(fromId)) {
+          await handleDeleteUserInput(fromId, text);
+        } else if (await getUserProfileState(fromId)) {
+          await handleUserProfileInput(fromId, text);
         } else if (await getWithdrawalState(fromId)) {
           await handleWithdrawal(fromId, text);
         } else if (await getPromocodeState(fromId)) {
